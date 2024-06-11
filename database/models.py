@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey
 from sqlalchemy.sql import func
-from sqlalchemy.orm import sessionmaker, declared_attr, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, declared_attr, DeclarativeBase, relationship
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn
-
 
 
 class Base(DeclarativeBase):
@@ -19,7 +18,6 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
-    sex = Column(String(255), nullable=False)
     p_name = Column(String(255), nullable=False)
     p_description = Column(Text)
     p_price = Column(DECIMAL(10, 2))
@@ -32,17 +30,19 @@ class Category(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
+    sex = Column(String(255), nullable=False)
 
 
 class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer)
-    user_name = Column(String(255))
-    phone_number = Column(String(20))
+    user_id = Column(Integer, ForeignKey("users.id"))
     total_price = Column(DECIMAL(10, 2))
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("User")
+
 
 
 class OrderItem(Base):
@@ -52,7 +52,11 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("orders.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Integer)
-    size = Column(String(10))
-    fabric = Column(String(50))
+    total_cost = Column(DECIMAL(10, 2))
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    tg_id = Column(Integer, primary_key=True, index=True)
+    phone_number = Column(String(20))
