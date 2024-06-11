@@ -7,17 +7,18 @@ from database.engine import SessionMaker
 from database.models import Category, Product, User, Order, OrderItem
 
 
-
 async def orm_get_categories():
     async with SessionMaker() as session:
         result = await session.execute(select(Category))
         categories = result.scalars().all()
         return categories
 
+
 async def orm_get_category_by_id(category_id: int):
     async with SessionMaker() as session:
         category = await session.scalar(select(Category).where(Category.id == category_id))
         return category
+
 
 async def orm_add_category(data):
     async with SessionMaker() as session:
@@ -61,12 +62,12 @@ async def orm_delete_category(session: AsyncSession, category_id: int):
             return False
 
 
-
 async def orm_get_products():
     async with SessionMaker() as session:
         result = await session.execute(select(Category))
         products = result.scalars().all()
         return products
+
 
 async def orm_get_product_by_id(product_id: int):
     async with SessionMaker() as session:
@@ -86,6 +87,7 @@ async def orm_add_product(name: str, description: str, price: float, category_id
         session.add(new_product)
         await session.commit()
 
+
 async def orm_get_products_by_category_id(category_id: int, offset: int, limit: int):
     async with SessionMaker() as session:
         result = await session.execute(
@@ -93,9 +95,64 @@ async def orm_get_products_by_category_id(category_id: int, offset: int, limit: 
         )
         return result.scalars().all()
 
+
 async def orm_count_products_by_category_id(category_id: int):
     async with SessionMaker() as session:
         result = await session.execute(
             select(func.count(Product.id)).where(Product.category_id == category_id)
         )
         return result.scalar()
+
+
+# region ORM PRODUCT UPDATE QUERIES
+
+async def orm_update_product_name(session, product_id: int, new_name: str) -> bool:
+    async with session.begin():
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.p_name = new_name
+            await session.commit()
+            return True
+    return False
+
+
+async def orm_update_product_price(session, product_id: int, new_price: float) -> bool:
+    async with session.begin():
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.p_price = new_price
+            await session.commit()
+            return True
+    return False
+
+
+async def orm_update_product_description(session, product_id: int, new_description: str) -> bool:
+    async with session.begin():
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.p_description = new_description
+            await session.commit()
+            return True
+    return False
+
+
+async def orm_update_product_photo(session, product_id: int, new_photo: str) -> bool:
+    async with session.begin():
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.image_url = new_photo
+            await session.commit()
+            return True
+    return False
+
+
+# endregion
+async def orm_delete_product_by_id(session: AsyncSession, product_id: int):
+    async with session.begin():
+        product = await session.get(Product, product_id)
+        if product:
+            await session.delete(product)  # Correctly awaiting the delete operation
+            await session.commit()
+            return True
+        else:
+            return False
