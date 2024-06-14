@@ -59,7 +59,7 @@ class DeleteProduct(StatesGroup):
 # region ADMIN PANEL MAIN CATALOG PRODUCTS CATEGORIES
 @admin_router.message(Command("admin"))
 async def admin_features(message: types.Message):
-    await message.answer('Возможные команды: /stop',
+    await message.answer('Возможные команды: \n/admin(Start Menu), /stop(Stop the Process)',
                                 reply_markup=kb.admin_main)
 
 @admin_router.message(Command("stop"))
@@ -556,36 +556,41 @@ async def admin_main_back(callback: CallbackQuery):
 # endregion
 
 # region ADMIN PANEL CATALOG
-@admin_router.callback_query(F.data == 'catalog_categories_')
-async def admin_main_back(callback: CallbackQuery, state: FSMContext):
+@admin_router.callback_query(F.data.startswith('CatalogCategories_'))
+async def admin_catalog(callback: CallbackQuery, state: FSMContext):
     data = callback.data.split('_')
-    category_id = int(data[1])
-    page = int(data[2]) if len(data) == 3 else 1  # Default to page 1 if no page is provided
-    await state.update_data(category_id=category_id)
-    await callback.answer('')
 
-    # Ensure the message content changes to avoid the "message is not modified" error
-    products_markup = await kb.products_for_catalog(category_id, page)
-    await callback.message.edit_text(f'Выберите продукт (Страница {page})', reply_markup=products_markup)
+    if len(data) >= 2 and data[1].isdigit():
+        category_id = int(data[1])
+        page = int(data[2]) if len(data) == 3 and data[2].isdigit() else 1  # Default to page 1 if no page is provided
+        await state.update_data(category_id=category_id)
+        await callback.answer('')
+
+        # Ensure the message content changes to avoid the "message is not modified" error
+        products_markup = await kb.products_for_catalog(category_id, page)
+        await callback.message.edit_text(f'Выберите продукт (Страница {page})', reply_markup=products_markup)
+    else:
+        await callback.message.edit_text("Неверный формат данных", reply_markup=kb.admin_main)
 
 
-@admin_router.callback_query(F.data.startswith('catalog_products_'))
+@admin_router.callback_query(F.data.startswith('Catalogproducts_'))
 async def show_product_details(callback: CallbackQuery, state: FSMContext):
     product_id = int(callback.data.split('_')[1])
     product = await orm_get_product_by_id(product_id)
 
     if product:
-        await state.update_data(product_id=product_id)  # Store product_id in state
+        await state.update_data(product_id=product_id,
+                                product_name=product.p_name)  # Store product_id and name in state
         text = (
             f"Название: {product.p_name}\n"
             f"Описание: {product.p_description}\n"
             f"Цена: {product.p_price} Сум\n\n\n"
+            "ВАШ ТОВАР"
         )
         if product.image_url:  # Using the image_url for the photo
             await callback.message.delete()  # Delete the previous message
-            await callback.message.answer_photo(photo=product.image_url, caption=text,
-                                                reply_markup=kb.admin_main)
+            await callback.message.answer_photo(photo=product.image_url, caption=text, reply_markup=None)
         else:
-            await callback.message.edit_text(text, reply_markup=kb.admin_main)
+            await callback.message.edit_text(text, reply_markup=None)
     else:
         await callback.message.edit_text("Продукт не найден", reply_markup=kb.admin_main)

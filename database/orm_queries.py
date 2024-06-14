@@ -69,10 +69,12 @@ async def orm_get_products():
         return products
 
 
-async def orm_get_product_by_id(product_id: int):
+async def orm_get_product_by_id(item_id: int):
     async with SessionMaker() as session:
-        product = await session.scalar(select(Product).where(Product.id == product_id))
-        return product
+        query = select(Product, Category).join(Category).where(Product.id == item_id)
+        result = await session.execute(query)
+        return result.scalars().first()
+
 
 
 async def orm_add_product(name: str, description: str, price: float, category_id: int, image_url: str):
@@ -156,3 +158,87 @@ async def orm_delete_product_by_id(session: AsyncSession, product_id: int):
             return True
         else:
             return False
+
+
+async def orm_set_user(tg_id):
+    async with SessionMaker() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+
+        if not user:
+            session.add(User(tg_id=tg_id))
+            await session.commit()
+
+async def orm_count_categories():
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(func.count(Category.id))
+        )
+        return result.scalar()
+
+async def orm_u_get_categories(offset: int, limit: int):
+    async with SessionMaker() as session:
+        query = select(Category).offset(offset).limit(limit)
+        result = await session.execute(query)
+        return result.scalars().all()
+
+
+async def get_or_create_order(user_id: int) -> Order:
+    async with SessionMaker() as session:
+        # Try to get the existing order with total_price == 0 for the user
+        query = select(Order).where(Order.user_id == user_id, Order.total_price == 0)
+        result = await session.execute(query)
+        order = result.scalars().first()
+
+        # If no such order exists, create a new one
+        if order is None:
+            order = Order(user_id=user_id, total_price=0)
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+
+        return order
+
+
+async def add_product_to_order(order: Order, product_id: int, quantity: int):
+    async with SessionMaker() as session:
+        product_query = select(Product).where(Product.id == product_id)
+        product_result = await session.execute(product_query)
+        product = product_result.scalars().one()
+
+        total_cost = product.p_price * quantity
+
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            quantity=quantity,
+            total_cost=total_cost
+        )
+        session.add(order_item)
+
+        order.total_price += total_cost
+        await session.commit()
+
+
+async def add_product_to_basket(user_id: int, product_id: int, quantity: int):
+    order = await get_or_create_order(user_id)
+    await add_product_to_order(order, product_id, quantity)
+
+async def orm_create_order_item(order_id: int, product_id: int, quantity: int, total_cost: float):
+    async with SessionMaker() as session:
+        new_order_item = OrderItem(
+            order_id=order_id,
+            product_id=product_id,
+            quantity=quantity,
+            total_cost=total_cost
+        )
+        session.add(new_order_item)
+        await session.commit()
+        await session.refresh(new_order_item)
+        return new_order_item
+
+async def orm_get_order_items_by_order_id(order_id):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(OrderItem).where(OrderItem.order_id == order_id)
+        )
+        return result.scalars().all()

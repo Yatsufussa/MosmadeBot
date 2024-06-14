@@ -56,7 +56,7 @@ class OrderItem(Base):
 
 
 class User(Base):
-    __tablename__ = "users"
-
-    tg_id = Column(Integer, primary_key=True, index=True)
-    phone_number = Column(String(20))
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tg_id = Column(Integer, unique=True, nullable=False)
+    phone_number = Column(String(15), nullable=True)

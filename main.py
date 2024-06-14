@@ -10,7 +10,7 @@ from middleware.db import DataBaseSession
 
 load_dotenv(find_dotenv())
 
-from handlers.user_private import user_private_router
+from handlers.user_private import user_private, register_handlers_user_private
 from handlers.user_group import user_group_router
 from handlers.admin_private import admin_router
 from database.engine import create_db, drop_db, SessionMaker
@@ -24,8 +24,8 @@ bot.my_admins_list = []
 
 
 dp = Dispatcher()
-
-dp.include_router(user_private_router)
+register_handlers_user_private(bot)
+dp.include_router(user_private)
 dp.include_router(user_group_router)
 dp.include_router(admin_router)
 
