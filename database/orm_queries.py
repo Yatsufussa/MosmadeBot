@@ -1,7 +1,9 @@
-from sqlalchemy import func
+from sqlalchemy import func, delete
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 
 from database.engine import SessionMaker
 from database.models import Category, Product, User, Order, OrderItem
@@ -76,7 +78,6 @@ async def orm_get_product_by_id(item_id: int):
         return result.scalars().first()
 
 
-
 async def orm_add_product(name: str, description: str, price: float, category_id: int, image_url: str):
     async with SessionMaker() as session:
         new_product = Product(
@@ -88,7 +89,6 @@ async def orm_add_product(name: str, description: str, price: float, category_id
         )
         session.add(new_product)
         await session.commit()
-
 
 async def orm_get_products_by_category_id(category_id: int, offset: int, limit: int):
     async with SessionMaker() as session:
@@ -168,12 +168,14 @@ async def orm_set_user(tg_id):
             session.add(User(tg_id=tg_id))
             await session.commit()
 
+
 async def orm_count_categories():
     async with SessionMaker() as session:
         result = await session.execute(
             select(func.count(Category.id))
         )
         return result.scalar()
+
 
 async def orm_u_get_categories(offset: int, limit: int):
     async with SessionMaker() as session:
@@ -223,6 +225,7 @@ async def add_product_to_basket(user_id: int, product_id: int, quantity: int):
     order = await get_or_create_order(user_id)
     await add_product_to_order(order, product_id, quantity)
 
+
 async def orm_create_order_item(order_id: int, product_id: int, quantity: int, total_cost: float):
     async with SessionMaker() as session:
         new_order_item = OrderItem(
@@ -236,9 +239,65 @@ async def orm_create_order_item(order_id: int, product_id: int, quantity: int, t
         await session.refresh(new_order_item)
         return new_order_item
 
+
 async def orm_get_order_items_by_order_id(order_id):
     async with SessionMaker() as session:
         result = await session.execute(
             select(OrderItem).where(OrderItem.order_id == order_id)
         )
         return result.scalars().all()
+
+
+async def orm_create_order(user_id: int, total_price: float) -> Order:
+    async with SessionMaker() as session:
+        new_order = Order(user_id=user_id, total_price=total_price)
+        session.add(new_order)
+        await session.commit()
+        await session.refresh(new_order)
+        return new_order
+
+
+# Function to get order items by order ID
+
+# Function to clear order items by order ID
+async def orm_clean_order_items_by_order_id(order_id: int):
+    async with SessionMaker() as session:
+        await session.execute(delete(OrderItem).filter(OrderItem.order_id == order_id))
+        await session.commit()
+
+
+async def orm_create_user_by_tg_id(tg_id: int) -> User:
+    async with SessionMaker() as session:
+        new_user = User(tg_id=tg_id)
+        session.add(new_user)
+        await session.commit()
+        await session.refresh(new_user)
+        return new_user
+
+
+async def orm_get_user_id_by_tg_id(tg_id: int) -> int:
+    async with SessionMaker() as session:
+        result = await session.execute(select(User).filter(User.tg_id == tg_id))
+        user = result.scalar()
+        if user:
+            return user.id
+        else:
+            return None
+
+
+async def orm_get_user_by_tg_id(tg_id: int) -> User:
+    async with SessionMaker() as session:
+        result = await session.execute(select(User).filter(User.tg_id == tg_id))
+        user = result.scalar()
+        return user
+
+async def orm_update_user(user: User):
+    try:
+        async with SessionMaker() as session:
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+    except SQLAlchemyError as e:
+        print(f"Error updating user: {e}")
+        await session.rollback()
+        raise

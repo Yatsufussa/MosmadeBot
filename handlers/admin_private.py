@@ -2,17 +2,16 @@ from aiogram import F, Router, types
 from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message, InputMediaPhoto
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ChatFilter.chat_type import ChatTypeFilter, IsAdmin
 import buttons.inline_buttons as kb
-from buttons.reply_buttons import get_keyboard
-from database.engine import SessionMaker
+
 from database.engine import *
 from database.orm_queries import orm_add_category, orm_update_category_name, orm_delete_category, \
-    orm_get_category_by_id, orm_add_product, orm_get_categories, orm_get_product_by_id, orm_update_product_name, \
+    orm_get_category_by_id, orm_add_product, orm_get_product_by_id, orm_update_product_name, \
     orm_update_product_description, orm_update_product_price, orm_update_product_photo, orm_delete_product_by_id, \
     orm_update_category_sex
 
@@ -23,12 +22,12 @@ admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 # region ADMINS CATEGORY MANIPULATION STATES
 class AddCategory(StatesGroup):
     add_name = State()
-    add_sex  = State()
+    add_sex = State()
 
 
 class ChangeCategory(StatesGroup):
     ch_name = State()
-    ch_sex  = State()
+    ch_sex = State()
 
 
 class DeleteCategory(StatesGroup):
@@ -39,20 +38,25 @@ class DeleteCategory(StatesGroup):
 
 # region ADMINS PRODUCT MANIPULATION STATES
 class AddProduct(StatesGroup):
-    add_category    = State()
-    add_name        = State()
+    add_category = State()
+    add_name = State()
     add_description = State()
-    add_price       = State()
-    add_photo       = State()
+    add_price = State()
+    add_photo = State()
+    add_more_photos = State()
+
 
 class ChangeProduct(StatesGroup):
-    ch_name        = State()
+    ch_name = State()
     ch_description = State()
-    ch_price       = State()
-    ch_photo       = State()
+    ch_price = State()
+    ch_photo = State()
+
 
 class DeleteProduct(StatesGroup):
     delete_product = State()
+
+
 # endregion
 
 
@@ -60,33 +64,33 @@ class DeleteProduct(StatesGroup):
 @admin_router.message(Command("admin"))
 async def admin_features(message: types.Message):
     await message.answer('Возможные команды: \n/admin(Start Menu), /stop(Stop the Process)',
-                                reply_markup=kb.admin_main)
+                         reply_markup=kb.admin_main)
+
 
 @admin_router.message(Command("stop"))
 async def admin_stop(message: types.Message):
     await message.delete()
     await message.answer('Вы в Админской части поздравляю',
-                                reply_markup=kb.admin_main)
+                         reply_markup=kb.admin_main)
 
 
 @admin_router.callback_query(F.data == 'category')
 async def admin_category(callback: CallbackQuery):
     await callback.answer('Вы нажали на категорию')
     await callback.message.edit_text('Действие для Категории',
-                                            reply_markup=kb.admin_category)
+                                     reply_markup=kb.admin_category)
 
 
 @admin_router.callback_query(F.data == 'product')
 async def admin_product(callback: CallbackQuery):
     await callback.answer('Вы нажали на Продукт')
     await callback.message.edit_text('Действие для Товара',
-                                            reply_markup=kb.admin_product)
+                                     reply_markup=kb.admin_product)
 
 
-@admin_router.callback_query(F.data == 'catalog')
-async def admin_catalog(callback: CallbackQuery):
-    await callback.message.edit_text('Выберите Категорию',
-                                            reply_markup=await kb.catalog_categories_menu())
+
+
+
 # endregion
 
 
@@ -137,6 +141,7 @@ async def admin_add_category_sex(message: Message, state=FSMContext):
 
     await state.clear()
 
+
 # endregion ADD CATEGORY
 
 # region CHANGE CATEGORY NAME AND SEX
@@ -147,7 +152,7 @@ async def category_operation_type(callback: CallbackQuery):
 
 
 # Handler when a category is selected
-@admin_router.callback_query(F.data.startswith('category_'))
+@admin_router.callback_query(F.data.startswith('admin_category_'))
 async def select_category(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[-1])
     category = await orm_get_category_by_id(category_id)
@@ -177,7 +182,8 @@ async def set_new_category_name(message: Message, state: FSMContext):
 
     # Validate new category name length
     if not (2 <= len(new_name) <= 30):
-        await message.answer("Имя категории должно быть длиной от 2 до 30 символов. Пожалуйста, введите допустимое имя.")
+        await message.answer(
+            "Имя категории должно быть длиной от 2 до 30 символов. Пожалуйста, введите допустимое имя.")
         return
 
     data = await state.get_data()
@@ -197,7 +203,8 @@ async def set_new_category_name(message: Message, state: FSMContext):
 async def category_operation_type(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ChangeCategory.ch_sex)
     await callback.answer('')
-    await callback.message.answer('Введите новый пол для категории (Мужской или Женский)', reply_markup=ReplyKeyboardRemove())
+    await callback.message.answer('Введите новый пол для категории (Мужской или Женский)',
+                                  reply_markup=ReplyKeyboardRemove())
 
 
 @admin_router.message(ChangeCategory.ch_sex)
@@ -290,10 +297,15 @@ async def admin_main_back(callback: CallbackQuery):
 # region Add PRODUCT
 @admin_router.callback_query(F.data == 'add_product')
 async def admin_add_product(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(AddProduct.add_category)
-    await callback.answer('')
-    await callback.message.edit_text('Выберите Категорию Товара', reply_markup=await kb.pcategory_keyboard())
-
+    message_type = (await state.get_data()).get('message_type', 'text')
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await state.set_state(AddProduct.add_category)
+        await callback.message.answer('Выберите Категорию Товара', reply_markup=await kb.admin_add_product_categories())
+    else:
+        await state.set_state(AddProduct.add_category)
+        await callback.message.edit_text('Выберите Категорию Товара', reply_markup=await kb.admin_add_product_categories())
 
 @admin_router.callback_query(F.data.startswith('pcategory_'))
 async def select_category_for_product(callback: CallbackQuery, state: FSMContext):
@@ -333,13 +345,14 @@ async def admin_add_product_photo(message: Message, state=FSMContext):
     name = data['name']
     description = data['description']
     price = float(data['price'])  # Ensure price is a float
-    photo = data['photo']
+    image_url = data['photo']
 
     # Save the new product to the database
-    await orm_add_product(name, description, price, category_id, photo)
+    await orm_add_product(name, description, price, category_id, image_url)
 
     await message.answer(f'Товар {name} успешно добавлен в категорию №{category_id}', reply_markup=kb.admin_product)
     await state.clear()
+
 
 
 # endregion
@@ -386,6 +399,7 @@ async def show_product_details(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(text, reply_markup=kb.admin_main)
     else:
         await callback.message.edit_text("Продукт не найден", reply_markup=kb.admin_main)
+
 
 
 @admin_router.callback_query(F.data == 'change_p_name')
@@ -480,6 +494,9 @@ async def set_new_product_photo(message: Message, state: FSMContext):
     await state.clear()
 
 
+
+
+
 # endregion
 
 # region Delete Product
@@ -489,6 +506,7 @@ async def admin_main_back(callback: CallbackQuery):
     await callback.answer('Удаление')
     await callback.message.edit_text('Выберите из Какой Категории Продукт для удаления',
                                      reply_markup=await kb.pdcategory_keyboard())
+
 
 @admin_router.callback_query(F.data.startswith('pdcategory_'))
 async def select_category_for_product(callback: CallbackQuery, state: FSMContext):
@@ -502,13 +520,15 @@ async def select_category_for_product(callback: CallbackQuery, state: FSMContext
     products_markup = await kb.products_to_delete(category_id, page)
     await callback.message.edit_text(f'Выберите продукт для удаления (Страница {page})', reply_markup=products_markup)
 
+
 @admin_router.callback_query(F.data.startswith('dproduct_'))
 async def show_product_details(callback: CallbackQuery, state: FSMContext):
     product_id = int(callback.data.split('_')[1])
     product = await orm_get_product_by_id(product_id)
 
     if product:
-        await state.update_data(product_id=product_id, product_name=product.p_name)  # Store product_id and name in state
+        await state.update_data(product_id=product_id,
+                                product_name=product.p_name)  # Store product_id and name in state
         text = (
             f"Название: {product.p_name}\n"
             f"Описание: {product.p_description}\n"
@@ -525,6 +545,7 @@ async def show_product_details(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text("Продукт не найден", reply_markup=kb.admin_main)
 
+
 @admin_router.message(DeleteProduct.delete_product)
 async def confirm_product_deletion(message: Message, state: FSMContext):
     confirmation = message.text.strip().lower()
@@ -534,7 +555,7 @@ async def confirm_product_deletion(message: Message, state: FSMContext):
 
     if confirmation == 'y':
         async with SessionMaker() as session:
-             deleted = await orm_delete_product_by_id(session, product_id)
+            deleted = await orm_delete_product_by_id(session, product_id)
 
         if deleted:
             await message.answer(f'Продукт "{product_name}" успешно удален.', reply_markup=kb.admin_product)
@@ -547,50 +568,15 @@ async def confirm_product_deletion(message: Message, state: FSMContext):
 
     # Clear the state after handling the confirmation
     await state.clear()
+
+
 # endregion
 
 @admin_router.callback_query(F.data == 'to_admin_product')
 async def admin_main_back(callback: CallbackQuery):
     await callback.message.delete()
     await callback.message.answer('Выберите Действие для Товара', reply_markup=kb.admin_product)
+
+
 # endregion
 
-# region ADMIN PANEL CATALOG
-@admin_router.callback_query(F.data.startswith('CatalogCategories_'))
-async def admin_catalog(callback: CallbackQuery, state: FSMContext):
-    data = callback.data.split('_')
-
-    if len(data) >= 2 and data[1].isdigit():
-        category_id = int(data[1])
-        page = int(data[2]) if len(data) == 3 and data[2].isdigit() else 1  # Default to page 1 if no page is provided
-        await state.update_data(category_id=category_id)
-        await callback.answer('')
-
-        # Ensure the message content changes to avoid the "message is not modified" error
-        products_markup = await kb.products_for_catalog(category_id, page)
-        await callback.message.edit_text(f'Выберите продукт (Страница {page})', reply_markup=products_markup)
-    else:
-        await callback.message.edit_text("Неверный формат данных", reply_markup=kb.admin_main)
-
-
-@admin_router.callback_query(F.data.startswith('Catalogproducts_'))
-async def show_product_details(callback: CallbackQuery, state: FSMContext):
-    product_id = int(callback.data.split('_')[1])
-    product = await orm_get_product_by_id(product_id)
-
-    if product:
-        await state.update_data(product_id=product_id,
-                                product_name=product.p_name)  # Store product_id and name in state
-        text = (
-            f"Название: {product.p_name}\n"
-            f"Описание: {product.p_description}\n"
-            f"Цена: {product.p_price} Сум\n\n\n"
-            "ВАШ ТОВАР"
-        )
-        if product.image_url:  # Using the image_url for the photo
-            await callback.message.delete()  # Delete the previous message
-            await callback.message.answer_photo(photo=product.image_url, caption=text, reply_markup=None)
-        else:
-            await callback.message.edit_text(text, reply_markup=None)
-    else:
-        await callback.message.edit_text("Продукт не найден", reply_markup=kb.admin_main)

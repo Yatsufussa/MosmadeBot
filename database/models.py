@@ -22,7 +22,7 @@ class Product(Base):
     p_description = Column(Text)
     p_price = Column(DECIMAL(10, 2))
     category_id = Column(Integer, ForeignKey("categories.id"))
-    image_url = Column(String(255))
+    image_url = Column(String(255), nullable=False)
 
 
 class Category(Base):
