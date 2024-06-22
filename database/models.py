@@ -14,23 +14,43 @@ class Base(DeclarativeBase):
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
 
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tg_id = Column(Integer, unique=True, nullable=False)
+    phone_number = Column(String(15), nullable=True)
+    language = Column(String(2), nullable=False, default='ru')  # Storing user's preferred language
+
+    orders = relationship("Order", back_populates="user")
+
+
+class Category(Base):
+    __tablename__ = 'categories'
+
+    id = Column(Integer, primary_key=True, index=True)
+    name_ru = Column(String(255), nullable=False)
+    name_uz = Column(String(255), nullable=False)
+    sex = Column(String(255), nullable=False)
+
+    products = relationship("Product", back_populates="category")
+
+
 class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
-    p_name = Column(String(255), nullable=False)
-    p_description = Column(Text)
-    p_price = Column(DECIMAL(10, 2))
+    price = Column(DECIMAL(10, 2))
     category_id = Column(Integer, ForeignKey("categories.id"))
     image_url = Column(String(255), nullable=False)
 
+    name_ru = Column(String(255), nullable=False)
+    name_uz = Column(String(255), nullable=False)
+    description_ru = Column(Text)
+    description_uz = Column(Text)
 
-class Category(Base):
-    __tablename__ = "categories"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    sex = Column(String(255), nullable=False)
+    category = relationship("Category", back_populates="products")
+    order_items = relationship("OrderItem", back_populates="product")
 
 
 class Order(Base):
@@ -41,8 +61,8 @@ class Order(Base):
     total_price = Column(DECIMAL(10, 2))
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    user = relationship("User")
-
+    user = relationship("User", back_populates="orders")
+    items = relationship("OrderItem", back_populates="order")
 
 
 class OrderItem(Base):
@@ -54,9 +74,5 @@ class OrderItem(Base):
     quantity = Column(Integer)
     total_cost = Column(DECIMAL(10, 2))
 
-
-class User(Base):
-    __tablename__ = 'users'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    tg_id = Column(Integer, unique=True, nullable=False)
-    phone_number = Column(String(15), nullable=True)
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product", back_populates="order_items")

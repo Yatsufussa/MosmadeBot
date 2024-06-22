@@ -9,6 +9,23 @@ from database.engine import SessionMaker
 from database.models import Category, Product, User, Order, OrderItem
 
 
+async def orm_update_user_language(tg_id: int, language_code: str):
+    async with SessionMaker() as session:
+        # Create a select statement
+        stmt = select(User).where(User.tg_id == tg_id)
+
+        # Execute the statement
+        result = await session.execute(stmt)
+
+        # Get the first matching user
+        user = result.scalars().first()
+
+        if user:
+            user.language = language_code
+            # Commit the changes
+            await session.commit()
+
+
 async def orm_get_categories():
     async with SessionMaker() as session:
         result = await session.execute(select(Category))
@@ -28,17 +45,26 @@ async def orm_add_category(data):
         await session.commit()
 
 
-async def orm_update_category_name(session: AsyncSession, category_id: int, new_name: str):
-    async with session.begin():
+async def orm_update_category_name_ru(category_id: int, new_name_ru: str):
+    async with SessionMaker() as session:
         result = await session.execute(select(Category).where(Category.id == category_id))
         category = result.scalar_one_or_none()
         if category:
-            category.name = new_name
+            category.name_ru = new_name_ru
             await session.commit()
             return True
         else:
             return False
-
+async def orm_update_category_name_uz(category_id: int, new_name_uz: str):
+    async with SessionMaker() as session:
+        result = await session.execute(select(Category).where(Category.id == category_id))
+        category = result.scalar_one_or_none()
+        if category:
+            category.name_uz = new_name_uz
+            await session.commit()
+            return True
+        else:
+            return False
 
 async def orm_update_category_sex(session: AsyncSession, category_id: int, new_sex: str):
     async with session.begin():
@@ -78,12 +104,14 @@ async def orm_get_product_by_id(item_id: int):
         return result.scalars().first()
 
 
-async def orm_add_product(name: str, description: str, price: float, category_id: int, image_url: str):
+async def orm_add_product(name_ru: str,name_uz: str,description_ru: str, description_uz: str,price: float, category_id: int, image_url: str):
     async with SessionMaker() as session:
         new_product = Product(
-            p_name=name,
-            p_description=description,
-            p_price=price,
+            name_ru=name_ru,
+            name_uz=name_uz,
+            description_ru=description_ru,
+            description_uz=description_uz,
+            price=price,
             category_id=category_id,
             image_url=image_url
         )
@@ -122,20 +150,30 @@ async def orm_update_product_price(session, product_id: int, new_price: float) -
     async with session.begin():
         product = await session.scalar(select(Product).where(Product.id == product_id))
         if product:
-            product.p_price = new_price
+            product.price = new_price
             await session.commit()
             return True
     return False
 
 
-async def orm_update_product_description(session, product_id: int, new_description: str) -> bool:
-    async with session.begin():
+async def orm_update_product_description_ru(product_id: int, new_description_ru: str) -> bool:
+    async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
         if product:
-            product.p_description = new_description
+            product.description_ru = new_description_ru
             await session.commit()
             return True
     return False
+
+async def orm_update_product_description_uz(product_id: int, new_description_uz: str) -> bool:
+    async with SessionMaker() as session:
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.description_uz = new_description_uz
+            await session.commit()
+            return True
+    return False
+
 
 
 async def orm_update_product_photo(session, product_id: int, new_photo: str) -> bool:
@@ -207,7 +245,7 @@ async def add_product_to_order(order: Order, product_id: int, quantity: int):
         product_result = await session.execute(product_query)
         product = product_result.scalars().one()
 
-        total_cost = product.p_price * quantity
+        total_cost = product.price * quantity
 
         order_item = OrderItem(
             order_id=order.id,

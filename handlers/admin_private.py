@@ -4,16 +4,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message, InputMediaPhoto
 
-from sqlalchemy.ext.asyncio import AsyncSession
+
 
 from ChatFilter.chat_type import ChatTypeFilter, IsAdmin
 import buttons.inline_buttons as kb
 
 from database.engine import *
-from database.orm_queries import orm_add_category, orm_update_category_name, orm_delete_category, \
+from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_get_category_by_id, orm_add_product, orm_get_product_by_id, orm_update_product_name, \
-    orm_update_product_description, orm_update_product_price, orm_update_product_photo, orm_delete_product_by_id, \
-    orm_update_category_sex
+     orm_update_product_price, orm_update_product_photo, orm_delete_product_by_id, \
+    orm_update_category_sex, orm_update_category_name_ru, orm_update_category_name_uz, \
+    orm_update_product_description_uz, orm_update_product_description_ru
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -21,13 +22,16 @@ admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 
 # region ADMINS CATEGORY MANIPULATION STATES
 class AddCategory(StatesGroup):
-    add_name = State()
+    add_name_ru = State()
+    add_name_uz = State()
     add_sex = State()
 
 
 class ChangeCategory(StatesGroup):
-    ch_name = State()
+    ch_name_ru = State()
+    ch_name_uz = State()
     ch_sex = State()
+
 
 
 class DeleteCategory(StatesGroup):
@@ -39,16 +43,20 @@ class DeleteCategory(StatesGroup):
 # region ADMINS PRODUCT MANIPULATION STATES
 class AddProduct(StatesGroup):
     add_category = State()
-    add_name = State()
-    add_description = State()
+    add_name_ru = State()
+    add_name_uz = State()
+    add_description_ru = State()
+    add_description_uz = State()
     add_price = State()
     add_photo = State()
     add_more_photos = State()
 
 
 class ChangeProduct(StatesGroup):
-    ch_name = State()
-    ch_description = State()
+    ch_name_ru = State()
+    ch_name_uz = State()
+    ch_description_ru = State()
+    ch_description_uz = State()
     ch_price = State()
     ch_photo = State()
 
@@ -98,25 +106,38 @@ async def admin_product(callback: CallbackQuery):
 # region ADD CATEGORY
 @admin_router.callback_query(F.data == 'add_category')
 async def admin_add_category(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(AddCategory.add_name)
+    await state.set_state(AddCategory.add_name_ru)
     await callback.answer('')
     await callback.message.answer('Введите имя для новой категории', reply_markup=ReplyKeyboardRemove())
 
 
-@admin_router.message(AddCategory.add_name)
+@admin_router.message(AddCategory.add_name_ru)
 async def admin_add_category_name(message: Message, state=FSMContext):
-    category_name = message.text
+    category_name_ru = message.text
 
     # Validate category name length
-    if not (2 <= len(category_name) <= 30):
+    if not (2 <= len(category_name_ru) <= 30):
         await message.answer(
             "Имя категории должно быть длиной от 2 до 30 символов. Пожалуйста, введите допустимое имя...")
         return
 
-    await state.update_data(name=category_name)
-    await message.answer('Введите пол для Категории (Мужской или Женский)', reply_markup=ReplyKeyboardRemove())
-    await state.set_state(AddCategory.add_sex)
+    await state.update_data(name_ru=category_name_ru)
+    await message.answer('Введите Название Категории на Узбекском', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddCategory.add_name_uz)
 
+@admin_router.message(AddCategory.add_name_uz)
+async def admin_add_category_name(message: Message, state=FSMContext):
+    category_name_uz = message.text
+
+    # Validate category name length
+    if not (2 <= len(category_name_uz) <= 30):
+        await message.answer(
+            "Имя категории должно быть длиной от 2 до 30 символов. Пожалуйста, введите допустимое имя...")
+        return
+
+    await state.update_data(name_uz=category_name_uz)
+    await message.answer('Введите Пол Мужской или Женский', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddCategory.add_sex)
 
 @admin_router.message(AddCategory.add_sex)
 async def admin_add_category_sex(message: Message, state=FSMContext):
@@ -131,7 +152,7 @@ async def admin_add_category_sex(message: Message, state=FSMContext):
     sex = 'Мужской' if sex == 'мужской' else 'Женский'
 
     data = await state.get_data()
-    category_data = {'name': data['name'], 'sex': sex}
+    category_data = {'name_ru': data['name_ru'], 'name_uz': data['name_uz'],'sex': sex}
 
     try:
         await orm_add_category(category_data)
@@ -148,11 +169,17 @@ async def admin_add_category_sex(message: Message, state=FSMContext):
 @admin_router.callback_query(F.data == 'change_category')
 async def category_operation_type(callback: CallbackQuery):
     await callback.answer('')
-    await callback.message.edit_text(text='Выберите категорию.', reply_markup=await kb.categories())
+    await callback.message.edit_text(text='Выберите категорию.', reply_markup=await kb.categories(back_callback='to_admin_main', page=1, categories_per_page=4))
 
+
+@admin_router.callback_query(F.data.startswith('admincategories_'))
+async def admin_categories_pagination(callback: CallbackQuery):
+    page = int(callback.data.split('_')[1])
+    await callback.answer('')
+    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.categories(back_callback='to_admin_main', page=page, categories_per_page=4))
 
 # Handler when a category is selected
-@admin_router.callback_query(F.data.startswith('admin_category_'))
+@admin_router.callback_query(F.data.startswith('admincategory_'))
 async def select_category(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[-1])
     category = await orm_get_category_by_id(category_id)
@@ -170,18 +197,18 @@ async def select_category(callback: CallbackQuery, state: FSMContext):
 # Handler to start the process of changing the category name
 @admin_router.callback_query(F.data == 'change_c_name')
 async def start_change_category_name(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(ChangeCategory.ch_name)
+    await state.set_state(ChangeCategory.ch_name_ru)
     await callback.answer('')
-    await callback.message.answer('Введите новое имя категории', reply_markup=ReplyKeyboardRemove())
+    await callback.message.answer('Введите новое имя категории(Ru)', reply_markup=ReplyKeyboardRemove())
 
 
 # Handler to process the new category name
-@admin_router.message(ChangeCategory.ch_name)
-async def set_new_category_name(message: Message, state: FSMContext):
-    new_name = message.text.strip()
+@admin_router.message(ChangeCategory.ch_name_ru)
+async def set_new_category_name_ru(message: Message, state: FSMContext):
+    new_name_ru = message.text.strip()
 
     # Validate new category name length
-    if not (2 <= len(new_name) <= 30):
+    if not (2 <= len(new_name_ru) <= 30):
         await message.answer(
             "Имя категории должно быть длиной от 2 до 30 символов. Пожалуйста, введите допустимое имя.")
         return
@@ -189,15 +216,42 @@ async def set_new_category_name(message: Message, state: FSMContext):
     data = await state.get_data()
     category_id = data.get('category_id')
 
-    async with SessionMaker() as session:
-        updated = await orm_update_category_name(session, category_id, new_name)
+
+    updated = await orm_update_category_name_ru(category_id, new_name_ru)
 
     if updated:
-        await message.answer(f'Имя категории обновлено на {new_name}.', reply_markup=kb.admin_category)
+        await message.answer(f'Имя категории обновлено на {new_name_ru}.', reply_markup=kb.admin_category)
+        # Transition to change category name in Uzbek
+        await state.set_state(ChangeCategory.ch_name_uz)
+        await message.answer('Kategoriya nomini yangilang (Uz)', reply_markup=ReplyKeyboardRemove())
     else:
         await message.answer(f'Категория с ID {category_id} не найдена.', reply_markup=kb.admin_category)
+
     await state.clear()
 
+
+# Handler to process the new category name in Uzbek
+@admin_router.message(ChangeCategory.ch_name_uz)
+async def set_new_category_name_uz(message: Message, state: FSMContext):
+    new_name_uz = message.text.strip()
+
+    # Validate new category name length
+    if not (2 <= len(new_name_uz) <= 30):
+        await message.answer(
+            "Kategoriya nomi 2 dan 30 belgidan iborat bo'lishi kerak. Iltimos, qabul qilingan nomni kiriting.")
+        return
+
+    data = await state.get_data()
+    category_id = data.get('category_id')
+
+    updated = await orm_update_category_name_uz(category_id, new_name_uz)
+
+    if updated:
+        await message.answer(f'Kategoriya nomi {new_name_uz} ga o`zgartirildi.', reply_markup=kb.admin_category)
+    else:
+        await message.answer(f'ID {category_id} bo`yicha kategoriya topilmadi.', reply_markup=kb.admin_category)
+
+    await state.clear()
 
 @admin_router.callback_query(F.data == 'change_c_sex')
 async def category_operation_type(callback: CallbackQuery, state: FSMContext):
@@ -238,10 +292,15 @@ async def change_category_sex(message: Message, state: FSMContext):
 @admin_router.callback_query(F.data == 'delete_category')
 async def category_operation_type(callback: CallbackQuery):
     await callback.answer('')
-    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.select_categories())
+    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.select_categories(back_callback='to_admin_main', page=1, categories_per_page=4))
 
+@admin_router.callback_query(F.data.startswith('selectcategories_'))
+async def admin_categories_pagination(callback: CallbackQuery):
+    page = int(callback.data.split('_')[1])
+    await callback.answer('')
+    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.select_categories(back_callback='to_admin_main', page=page, categories_per_page=4))
 
-@admin_router.callback_query(F.data.startswith('select_category_'))
+@admin_router.callback_query(F.data.startswith('selectcategory_'))
 async def select_category_to_delete(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[-1])
     await state.update_data(category_id=category_id)
@@ -312,23 +371,34 @@ async def select_category_for_product(callback: CallbackQuery, state: FSMContext
     category_id = int(callback.data.split('_')[-1])
     await state.update_data(category_id=category_id)
     await callback.answer('')
-    await callback.message.answer('Введите имя нового товара', reply_markup=ReplyKeyboardRemove())
-    await state.set_state(AddProduct.add_name)
+    await callback.message.answer('Введите имя нового товара(RU)', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddProduct.add_name_ru)
 
 
-@admin_router.message(AddProduct.add_name)
+@admin_router.message(AddProduct.add_name_ru)
 async def admin_add_product_name(message: Message, state=FSMContext):
-    await state.update_data(name=message.text)
-    await message.answer('Введите Описание Товара одним сообщением', reply_markup=ReplyKeyboardRemove())
-    await state.set_state(AddProduct.add_description)
+    await state.update_data(name_ru=message.text)
+    await message.answer('Введите Имя Товара одним сообщением(UZ)', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddProduct.add_name_uz)
+
+@admin_router.message(AddProduct.add_name_uz)
+async def admin_add_product_name(message: Message, state=FSMContext):
+    await state.update_data(name_uz=message.text)
+    await message.answer('Введите Описание Товара одним сообщением(RU)', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddProduct.add_description_ru)
 
 
-@admin_router.message(AddProduct.add_description)
+@admin_router.message(AddProduct.add_description_ru)
 async def admin_add_product_description(message: Message, state=FSMContext):
-    await state.update_data(description=message.text)
+    await state.update_data(description_ru=message.text)
+    await message.answer('Введите Описание Товара одним сообщением(UZ)', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddProduct.add_description_uz)
+
+@admin_router.message(AddProduct.add_description_uz)
+async def admin_add_product_description(message: Message, state=FSMContext):
+    await state.update_data(description_uz=message.text)
     await message.answer('Введите цену товара только числами(Сум)', reply_markup=ReplyKeyboardRemove())
     await state.set_state(AddProduct.add_price)
-
 
 @admin_router.message(AddProduct.add_price)
 async def admin_add_product_price(message: Message, state=FSMContext):
@@ -338,20 +408,26 @@ async def admin_add_product_price(message: Message, state=FSMContext):
 
 
 @admin_router.message(AddProduct.add_photo, F.photo)
-async def admin_add_product_photo(message: Message, state=FSMContext):
-    await state.update_data(photo=message.photo[-1].file_id)
-    data = await state.get_data()
-    category_id = data['category_id']
-    name = data['name']
-    description = data['description']
-    price = float(data['price'])  # Ensure price is a float
-    image_url = data['photo']
+async def admin_add_product_photo(message: Message, state: FSMContext):
+    try:
+        data = await state.get_data()
+        category_id = data.get('category_id')
+        name_ru = data.get('name_ru')
+        name_uz = data.get('name_uz')
+        description_ru = data.get('description_ru')
+        description_uz = data.get('description_uz')
+        price = float(data.get('price')) if 'price' in data else None
+        photo = message.photo[-1].file_id if message.photo else None
 
-    # Save the new product to the database
-    await orm_add_product(name, description, price, category_id, image_url)
+        if category_id and name_ru and name_uz and description_ru and description_uz and price and photo:
+            await orm_add_product(name_ru, name_uz, description_ru, description_uz, price, category_id, photo)
+            await message.answer(f'Товар {name_ru} успешно добавлен в категорию №{category_id}', reply_markup=kb.admin_product)
+            await state.clear()
+        else:
+            await message.answer('Не удалось добавить товар. Пожалуйста, заполните все поля правильно.')
 
-    await message.answer(f'Товар {name} успешно добавлен в категорию №{category_id}', reply_markup=kb.admin_product)
-    await state.clear()
+    except Exception as e:
+        await message.answer(f'Произошла ошибка при добавлении товара: {str(e)}')
 
 
 
@@ -362,7 +438,15 @@ async def admin_add_product_photo(message: Message, state=FSMContext):
 async def admin_main_back(callback: CallbackQuery):
     await callback.answer('Вы в пункте Продукты')
     await callback.message.edit_text('Выберите из Какой Категории Продукт',
-                                     reply_markup=await kb.pchcategory_keyboard())
+                                     reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_main',page=1,categories_per_page=4))
+
+
+@admin_router.callback_query(F.data.startswith('pchcategories_'))
+async def categories_pagination(callback: CallbackQuery):
+    page = int(callback.data.split('_')[1])
+    await callback.answer('')
+    await callback.message.edit_text('Выберите из Какой Категории Продукт', reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_main',page=page,categories_per_page=4))
+
 
 
 @admin_router.callback_query(F.data.startswith('pchcategory_'))
@@ -374,25 +458,35 @@ async def select_category_for_product(callback: CallbackQuery, state: FSMContext
     await callback.answer('')
 
     # Ensure the message content changes to avoid the "message is not modified" error
-    products_markup = await kb.products_by_category(category_id, page)
+    products_markup = await kb.products_by_category(category_id, page=1,items_per_row=3)
     await callback.message.edit_text(f'Выберите продукт (Страница {page})', reply_markup=products_markup)
+
+@admin_router.callback_query(F.data.startswith('products_'))
+async def category_pagination(callback: CallbackQuery, state: FSMContext):
+    data = callback.data.split('_')
+    category_id = int(data[1])
+    page = int(data[2])
+    await state.update_data(category_id=category_id)
+    await callback.answer('')
+    await callback.message.edit_text('Выберите товар', reply_markup=await kb.items(category_id, page))
 
 
 @admin_router.callback_query(F.data.startswith('product_'))
-async def show_product_details(callback: CallbackQuery, state: FSMContext):
+async def show_product_details(callback: types.CallbackQuery, state: FSMContext):
     product_id = int(callback.data.split('_')[1])
     product = await orm_get_product_by_id(product_id)
-
     if product:
-        await state.update_data(product_id=product_id)  # Store product_id in state
+        await state.update_data(product_id=product_id)
         text = (
-            f"Название: {product.p_name}\n"
-            f"Описание: {product.p_description}\n"
-            f"Цена: {product.p_price} Сум\n\n\n"
+            f"Название (RU): {product.name_ru}\n"
+            f"Название (UZ): {product.name_uz}\n"
+            f"Описание (RU): {product.description_ru}\n"
+            f"Описание (UZ): {product.description_uz}\n"
+            f"Цена: {product.price} Сум\n\n\n"
             "ВЫБЕРИТЕ ЧТО ХОТИТЕ ИЗМЕНИТЬ"
         )
-        if product.image_url:  # Using the image_url for the photo
-            await callback.message.delete()  # Delete the previous message
+        if product.image_url:
+            await callback.message.delete()
             await callback.message.answer_photo(photo=product.image_url, caption=text,
                                                 reply_markup=kb.admin_product_change)
         else:
@@ -404,22 +498,36 @@ async def show_product_details(callback: CallbackQuery, state: FSMContext):
 
 @admin_router.callback_query(F.data == 'change_p_name')
 async def start_change_product_name(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(ChangeProduct.ch_name)
+    await state.set_state(ChangeProduct.ch_name_ru)
     await callback.answer('')
     await callback.message.answer('Введите новое имя продукта', reply_markup=ReplyKeyboardRemove())
 
 
-@admin_router.message(ChangeProduct.ch_name)
+@admin_router.message(ChangeProduct.ch_name_ru)
 async def set_new_product_name(message: Message, state: FSMContext):
-    new_name = message.text
+    new_name_ru = message.text
     data = await state.get_data()
     product_id = data.get('product_id')
 
-    async with SessionMaker() as session:
-        updated = await orm_update_product_name(session, product_id, new_name)
+    updated = await orm_update_product_name(product_id, new_name_ru)
 
     if updated:
-        await message.answer(f'Имя продукта обновлено на {new_name}.', reply_markup=kb.admin_product)
+        await message.answer(f'Имя продукта обновлено на {new_name_ru}.\n\nВведите имя на UZ', reply_markup=ReplyKeyboardRemove())
+    else:
+        await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
+    await state.set_state(ChangeProduct.ch_name_uz)
+
+
+@admin_router.message(ChangeProduct.ch_name_uz)
+async def set_new_product_name(message: Message, state: FSMContext):
+    new_name_uz = message.text
+    data = await state.get_data()
+    product_id = data.get('product_id')
+
+    updated = await orm_update_product_name(product_id, new_name_uz)
+
+    if updated:
+        await message.answer(f'Имя продукта обновлено на {new_name_uz}.(UZ)', reply_markup=kb.admin_product)
     else:
         await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
     await state.clear()
@@ -427,22 +535,36 @@ async def set_new_product_name(message: Message, state: FSMContext):
 
 @admin_router.callback_query(F.data == 'change_p_description')
 async def start_change_product_description(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(ChangeProduct.ch_description)
+    await state.set_state(ChangeProduct.ch_description_ru)
     await callback.answer('')
     await callback.message.answer('Введите новое описание продукта', reply_markup=ReplyKeyboardRemove())
 
 
-@admin_router.message(ChangeProduct.ch_description)
+@admin_router.message(ChangeProduct.ch_description_ru)
 async def set_new_product_description(message: Message, state: FSMContext):
-    new_description = message.text
+    new_description_ru = message.text
     data = await state.get_data()
     product_id = data.get('product_id')
 
-    async with SessionMaker() as session:
-        updated = await orm_update_product_description(session, product_id, new_description)
+    updated = await orm_update_product_description_ru(product_id, new_description_ru)
 
     if updated:
-        await message.answer(f'Описание продукта обновлено на {new_description}.', reply_markup=kb.admin_product)
+        await message.answer(f'Описание продукта обновлено на {new_description_ru}.\n\nДобавь описание на UZ', reply_markup=ReplyKeyboardRemove())
+    else:
+        await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
+    await state.set_state(ChangeProduct.ch_description_uz)
+
+
+@admin_router.message(ChangeProduct.ch_description_uz)
+async def set_new_product_description(message: Message, state: FSMContext):
+    new_description_uz = message.text
+    data = await state.get_data()
+    product_id = data.get('product_id')
+
+    updated = await orm_update_product_description_uz(product_id, new_description_uz)
+
+    if updated:
+        await message.answer(f'Описание продукта обновлено на {new_description_uz}.', reply_markup=kb.admin_product)
     else:
         await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
     await state.clear()
@@ -505,11 +627,16 @@ async def set_new_product_photo(message: Message, state: FSMContext):
 async def admin_main_back(callback: CallbackQuery):
     await callback.answer('Удаление')
     await callback.message.edit_text('Выберите из Какой Категории Продукт для удаления',
-                                     reply_markup=await kb.pdcategory_keyboard())
+                                     reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_main',page=1,categories_per_page=4))
 
+@admin_router.callback_query(F.data.startswith('pdcategories_'))
+async def categories_pagination(callback: CallbackQuery):
+    page = int(callback.data.split('_')[1])
+    await callback.answer('')
+    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_main',page=page,categories_per_page=4))
 
 @admin_router.callback_query(F.data.startswith('pdcategory_'))
-async def select_category_for_product(callback: CallbackQuery, state: FSMContext):
+async def admin_select_category_for_product(callback: CallbackQuery, state: FSMContext):
     data = callback.data.split('_')
     category_id = int(data[1])
     page = int(data[2]) if len(data) == 3 else 1  # Default to page 1 if no page is provided
@@ -517,8 +644,17 @@ async def select_category_for_product(callback: CallbackQuery, state: FSMContext
     await callback.answer('')
 
     # Ensure the message content changes to avoid the "message is not modified" error
-    products_markup = await kb.products_to_delete(category_id, page)
+    products_markup = await kb.products_to_delete(category_id, page,items_per_row=3)
     await callback.message.edit_text(f'Выберите продукт для удаления (Страница {page})', reply_markup=products_markup)
+
+@admin_router.callback_query(F.data.startswith('dproducts_'))
+async def admin_category_pagination(callback: CallbackQuery, state: FSMContext):
+    data = callback.data.split('_')
+    category_id = int(data[1])
+    page = int(data[2])
+    await state.update_data(category_id=category_id)
+    await callback.answer('')
+    await callback.message.edit_text('Выберите товар', reply_markup=await kb.products_to_delete(category_id, page))
 
 
 @admin_router.callback_query(F.data.startswith('dproduct_'))
@@ -528,11 +664,11 @@ async def show_product_details(callback: CallbackQuery, state: FSMContext):
 
     if product:
         await state.update_data(product_id=product_id,
-                                product_name=product.p_name)  # Store product_id and name in state
+                                product_name=product.name_ru)  # Store product_id and name in state
         text = (
-            f"Название: {product.p_name}\n"
-            f"Описание: {product.p_description}\n"
-            f"Цена: {product.p_price} Сум\n\n\n"
+            f"Название: {product.name_uz}\n"
+            f"Описание: {product.description_ru}\n"
+            f"Цена: {product.price} Сум\n\n\n"
             "Вы уверены что хотите удалить этот продукт? (Y/N)"
         )
         if product.image_url:  # Using the image_url for the photo

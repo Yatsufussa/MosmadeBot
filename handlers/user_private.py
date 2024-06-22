@@ -7,14 +7,18 @@ from aiogram.types import ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command, or_f
 import locale
 
+from language_dictionary.language import MESSAGES
+
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 import buttons.inline_buttons as kb
-from database.orm_queries import orm_set_user, orm_get_product_by_id, add_product_to_basket, orm_create_order_item, \
-    orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_create_user_by_tg_id, \
-    orm_get_user_id_by_tg_id, orm_update_user, orm_get_user_by_tg_id
+from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create_order_item, \
+    orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_update_user, \
+    orm_get_user_by_tg_id, orm_update_user_language
 
 user_private = Router()
 
+class LanguageState(StatesGroup):
+    language = State()
 
 class OrderState(StatesGroup):
     waiting_for_phone_number = State()
@@ -36,21 +40,31 @@ class Form(StatesGroup):
 
 
 @user_private.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
     await orm_set_user(message.from_user.id)  # Assuming orm.set_user() registers the user
-    await message.answer("Добро пожаловать в интернет магазин!", reply_markup=kb.main_menu_keyboard)
+    await state.set_state(LanguageState.language)
+    await state.update_data(language='ru')  # Default language
+    await message.answer(text="Вас приветсвует магазин Mosmade выберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz interfeys tilini tanlang.",
+                         reply_markup=kb.language_selection_keyboard())
+
+@user_private.callback_query(F.data.startswith('select_language_'))
+async def select_language(callback: CallbackQuery, state: FSMContext):
+    language_code = callback.data.split('_')[2]
+    await state.update_data(language=language_code)
+    await orm_update_user_language(callback.from_user.id, language_code)  # Update user language in DB
+    await callback.answer('')
+    await callback.message.edit_text(MESSAGES[language_code]['language_selected'], reply_markup= kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'to_main')
 async def to_main(callback: CallbackQuery, state: FSMContext):
     message_type = (await state.get_data()).get('message_type', 'text')
-
     if message_type == 'photo':
         # Delete photo message
         await callback.message.delete()
-        await callback.message.answer("Добро пожаловать в интернет магазин!", reply_markup=kb.main_menu_keyboard)
+        await callback.message.answer("Добро пожаловать в интернет магазин!", reply_markup= kb.main_menu_keyboard(language_code))
     else:
-        await callback.message.edit_text("Добро пожаловать в интернет магазин!", reply_markup=kb.main_menu_keyboard)
+        await callback.message.edit_text("Добро пожаловать в интернет магазин!", reply_markup= kb.main_menu_keyboard(language_code))
 
     await state.update_data(message_type='text')
 
@@ -65,18 +79,18 @@ async def catalog(callback: CallbackQuery, state: FSMContext):
         # Delete photo message
         await callback.message.delete()
         await callback.message.answer(text='Выберите категорию.',
-                                      reply_markup=await kb.user_categories(back_callback='to_main'))
+                                      reply_markup=await kb.user_categories(back_callback='to_main',page=1,categories_per_page=4))
     else:
 
         await callback.message.edit_text(text='Выберите категорию.',
-                                         reply_markup=await kb.user_categories(back_callback='to_main'))
+                                         reply_markup=await kb.user_categories(back_callback='to_main',page=1,categories_per_page=4))
 
 
 @user_private.callback_query(F.data.startswith('usercategories_'))
 async def categories_pagination(callback: CallbackQuery):
     page = int(callback.data.split('_')[1])
     await callback.answer('')
-    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.user_categories(page))
+    await callback.message.edit_text('Выберите категорию.', reply_markup=await kb.user_categories(back_callback='to_main',page=page,categories_per_page=4))
 
 
 @user_private.callback_query(F.data.startswith('UserCategory_'))
@@ -84,7 +98,7 @@ async def category(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[1])
     await state.update_data(category_id=category_id)
     await callback.answer('')
-    await callback.message.edit_text('Выберите товар', reply_markup=await kb.items(category_id, page=1))
+    await callback.message.edit_text('Выберите товар', reply_markup=await kb.items(category_id, page=1,items_per_row=3))
 
 
 @user_private.callback_query(F.data.startswith('itemscategory_'))
@@ -121,7 +135,8 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
             await state.update_data(message_type='text')  # Update state with message type
             await callback.message.edit_text(text, reply_markup=None)
     else:
-        await callback.message.edit_text("Продукт не найден", reply_markup=await kb.user_categories(back_callback='catalog'))
+        await callback.message.edit_text("Продукт не найден",
+                                         reply_markup=await kb.user_categories(back_callback='catalog'))
 
 
 async def update_product_text(callback: CallbackQuery, state: FSMContext):
@@ -205,11 +220,11 @@ async def basket_handler(callback: CallbackQuery, state: FSMContext):
 
     if not user.phone_number:
         await state.set_state(OrderState.waiting_for_phone_number)
-        await callback.message.answer("Пожалуйста, отправьте ваш номер телефона:", reply_markup=kb.get_contact_keyboard())
+        await callback.message.answer("Пожалуйста, отправьте ваш номер телефона:",
+                                      reply_markup=kb.get_contact_keyboard())
         return
 
     await show_basket(callback, state)
-
 
 
 @user_private.message(OrderState.waiting_for_phone_number, F.contact)
@@ -226,11 +241,9 @@ async def process_phone_number_contact(message: Message, state: FSMContext):
     await show_basket(message, state)
 
 
-
 @user_private.message(OrderState.waiting_for_phone_number, F.data)
 async def process_phone_number_text(message: Message, state: FSMContext):
     await message.answer("Нажмите на кнопку, чтобы отправить контакт или отправьте в формате.")
-
 
 
 async def show_basket(callback_or_message, state: FSMContext):
@@ -264,8 +277,7 @@ async def show_basket(callback_or_message, state: FSMContext):
 
     text += f"Общая стоимость всех продуктов: {total_cost} Сум"
 
-    await message.edit_text(text, reply_markup= kb.create_basket_buttons)
-
+    await message.edit_text(text, reply_markup=kb.create_basket_buttons)
 
 
 GROUP_CHAT_IDS = [-4257083278]
@@ -322,16 +334,19 @@ async def get_orders(message: types.Message, state: FSMContext):
 async def buy_product(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await callback.message.answer('https://telegra.ph/Mosmade-06-14')
-    await callback.message.answer("Добро пожаловать в магазин Mosmade!", reply_markup=kb.main_menu_keyboard)
+    await callback.message.answer("Добро пожаловать в магазин Mosmade!", reply_markup= await kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'contacts')
 async def buy_product(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
-    chat_id = 877993978
     await callback.message.answer('https://t.me/ruslan_mukhtasimov')
-    await callback.message.answer("Добро пожаловать в интернет магазин! Mosmade!", reply_markup=kb.main_menu_keyboard)
+    await callback.message.answer("Добро пожаловать в интернет магазин! Mosmade!", reply_markup= await kb.main_menu_keyboard(language_code))
 
+@user_private.callback_query(F.data == 'language')
+async def buy_product(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
+    await callback.message.answer("Выберите Язык\nTilni tanlang", reply_markup=kb.language_selection_keyboard())
 
 @user_private.callback_query(F.data == 'private_add_product')
 async def to_category(callback: CallbackQuery):
