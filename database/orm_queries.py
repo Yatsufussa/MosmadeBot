@@ -24,6 +24,23 @@ async def orm_update_user_language(tg_id: int, language_code: str):
             user.language = language_code
             # Commit the changes
             await session.commit()
+async def orm_get_user_language(tg_id: int) -> str:
+    async with SessionMaker() as session:
+        result = await session.execute(select(User.language).where(User.tg_id == tg_id))
+        user_language = result.scalar_one_or_none()
+        if user_language:
+            return user_language
+        else:
+            return 'ru'
+
+
+# Usage example
+# session is your SQLAlchemy session object
+# tg_id is the Telegram ID of the user you want to find the language for
+
+# with Session(engine) as session:
+#     user_language = get_user_language(session, tg_id)
+#     print(f"The user's language is: {user_language}")
 
 
 async def orm_get_categories():
@@ -55,6 +72,24 @@ async def orm_update_category_name_ru(category_id: int, new_name_ru: str):
             return True
         else:
             return False
+
+async def orm_get_category_name(category_id: int, language_code: str = 'ru') -> str:
+    async with SessionMaker() as session:
+        # Select category asynchronously
+        result = await session.execute(
+            select(Category).filter(Category.id == category_id)
+        )
+        category = result.scalar()
+
+        if not category:
+            return "Unknown Category"
+
+        # Determine which name to return based on language_code
+        if language_code == 'uz':
+            return category.name_uz
+        else:
+            return category.name_ru
+
 async def orm_update_category_name_uz(category_id: int, new_name_uz: str):
     async with SessionMaker() as session:
         result = await session.execute(select(Category).where(Category.id == category_id))
