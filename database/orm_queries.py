@@ -242,19 +242,33 @@ async def orm_set_user(tg_id):
             await session.commit()
 
 
-async def orm_count_categories():
+async def orm_count_categories(sex: str = None):
     async with SessionMaker() as session:
-        result = await session.execute(
-            select(func.count(Category.id))
-        )
-        return result.scalar()
+        query = select(func.count(Category.id))
+        if sex:
+            query = query.where(Category.sex == sex)
+        result = await session.execute(query)
+        total_count = result.scalar()
+
+        # Debug print
+        print(f"ORM Count Query: {query}\nTotal Count: {total_count}")
+
+        return total_count
 
 
-async def orm_u_get_categories(offset: int, limit: int):
+async def orm_u_get_categories(offset: int, limit: int, sex: str = None):
     async with SessionMaker() as session:
         query = select(Category).offset(offset).limit(limit)
+        if sex:
+            query = query.where(Category.sex == sex)
         result = await session.execute(query)
-        return result.scalars().all()
+        categories = result.scalars().all()
+
+        # Debug print
+        print(f"ORM Get Categories Query: {query}\nCategories: {categories}")
+
+        return categories
+
 
 
 async def get_or_create_order(user_id: int) -> Order:

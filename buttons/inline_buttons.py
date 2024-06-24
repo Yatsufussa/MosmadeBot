@@ -100,7 +100,23 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
 
     return markup
 
+def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMarkup:
+    if language_code == 'ru':
+        buttons = [
+            [InlineKeyboardButton(text="Мужчины", callback_data='gender_male'),
+            InlineKeyboardButton(text="Женщины", callback_data='gender_female')],
+            [InlineKeyboardButton(text="Назад", callback_data='to_main')],
+        ]
+    elif language_code == 'uz':
+        buttons = [
+            [InlineKeyboardButton(text="Erkaklar", callback_data='gender_male'),
+            InlineKeyboardButton(text="Ayollar", callback_data='gender_female')],
+            [InlineKeyboardButton(text="Orqaga", callback_data='to_main')],
+        ]
+    else:
+        buttons = []
 
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
@@ -203,14 +219,6 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
             InlineKeyboardButton(text='⬅️ Назад', callback_data=callback_data)
         )
 
-    if page < total_pages:
-        callback_data = f'{navigation_callback}_{category_id}_{page + 1}'
-        if len(callback_data) > 64:
-            raise ValueError(f'callback_data length exceeds 64 characters: {callback_data}')
-        pagination_buttons.append(
-            InlineKeyboardButton(text='➡️ Далее', callback_data=callback_data)
-        )
-
     if isinstance(back_callback, str) and back_callback:  # Ensure back_callback is a non-empty string
         if language == 'ru':
             back_to_categories_text = 'Назад к Категориям'
@@ -225,9 +233,27 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
             InlineKeyboardButton(text=back_to_categories_text, callback_data=back_callback)
         )
 
-    inline_keyboard.append(pagination_buttons)
+    if page < total_pages:
+        callback_data = f'{navigation_callback}_{category_id}_{page + 1}'
+        if len(callback_data) > 64:
+            raise ValueError(f'callback_data length exceeds 64 characters: {callback_data}')
+        pagination_buttons.append(
+            InlineKeyboardButton(text='➡️ Далее', callback_data=callback_data)
+        )
+
+    # Arrange buttons: previous on the left, back in the middle, next on the right
+    arranged_pagination_buttons = []
+    if len(pagination_buttons) == 1:
+        arranged_pagination_buttons = [pagination_buttons[0]]
+    elif len(pagination_buttons) == 2:
+        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1]]
+    elif len(pagination_buttons) == 3:
+        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1], pagination_buttons[2]]
+
+    inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
 
 
 async def products_by_category(category_id: int, page: int, items_per_row: int = 2):
@@ -262,14 +288,17 @@ def create_product_buttons(quantity: int, language_code: str = 'ru') -> InlineKe
 
     return markup
 
-# Categories Generator
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 
 async def generate_category_keyboard(page: int, categories_per_page: int, callback_prefix: str,
-                                     navigation_callback: str, back_callback: str, language: str = 'ru'):
+                                     navigation_callback: str, back_callback: str, language: str = 'ru', sex: str = None):
     offset = (page - 1) * categories_per_page
-    all_categories = await orm_u_get_categories(offset, categories_per_page)
-    total_categories = await orm_count_categories()
+    all_categories = await orm_u_get_categories(offset, categories_per_page, sex)
+    total_categories = await orm_count_categories(sex)
+
+    # Debug: Print categories and total count
+    print(f"Gender: {sex}, Offset: {offset}, Limit: {categories_per_page}")
+    print(f"All categories: {all_categories}, Total categories: {total_categories}")
 
     inline_keyboard = []
     row = []
@@ -304,19 +333,29 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
         )
 
     if language == 'ru':
-        back_to_main_menu_text = 'Назад к главному меню'
+        back_to_main_menu_text = 'Назад'
     elif language == 'uz':
-        back_to_main_menu_text = 'Bosh menyuga qaytish'
+        back_to_main_menu_text = 'Orqaga'
     else:
-        back_to_main_menu_text = 'Назад к главному меню'  # Default to Russian if language code is invalid
+        back_to_main_menu_text = 'Назад'  # Default to Russian if language code is invalid
 
     pagination_buttons.append(
         InlineKeyboardButton(text=back_to_main_menu_text, callback_data=back_callback)
     )
 
-    inline_keyboard.append(pagination_buttons)
+    # Arrange buttons: previous on the left, back in the middle, next on the right
+    arranged_pagination_buttons = []
+    if len(pagination_buttons) == 1:
+        arranged_pagination_buttons = [pagination_buttons[0]]
+    elif len(pagination_buttons) == 2:
+        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1]]
+    elif len(pagination_buttons) == 3:
+        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[2], pagination_buttons[1]]
+
+    inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
 
 
 async def admin_add_product_categories(page: int = 1, categories_per_page: int = 5):
@@ -344,8 +383,5 @@ async def select_categories(page: int, categories_per_page: int = 5,back_callbac
                                             back_callback)
 
 
-async def user_categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = ''):
-    return await generate_category_keyboard(page, categories_per_page, 'UserCategory', 'usercategories', back_callback,language)
-
-
-
+async def user_categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '', sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'UserCategory', 'usercategories', back_callback, language, sex)

@@ -7,7 +7,7 @@ from aiogram.types import ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command, or_f
 import locale
 
-from language_dictionary.language import MESSAGES, MESSAGES_RU, MESSAGES_UZ
+from language_dictionary.language import MESSAGES, MESSAGES_RU, MESSAGES_UZ, GENDER_MAPPING
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 import buttons.inline_buttons as kb
@@ -84,29 +84,64 @@ async def to_main(callback: CallbackQuery, state: FSMContext):
 @user_private.callback_query(F.data == 'catalog')
 async def catalog(callback: CallbackQuery, state: FSMContext):
     await callback.answer('')
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')  # Retrieve the message type from the state
+
+    # Get the user's preferred language
+    language_code = await orm_get_user_language(callback.from_user.id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])  # Default to Russian if language code is not found
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['choose_gender'],
+            reply_markup=kb.category_gender_selection_keyboard(language_code)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['choose_gender'],
+            reply_markup=kb.category_gender_selection_keyboard(language_code)
+        )
+
+
+
+@user_private.callback_query(F.data.startswith('gender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
     data = await state.get_data()
     message_type = data.get('message_type', 'text')
 
     # Get the user's preferred language
     language_code = await orm_get_user_language(callback.from_user.id)
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
     if message_type == 'photo':
         # Delete photo message
         await callback.message.delete()
         await callback.message.answer(
             text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4, language=language_code)
+            reply_markup=await kb.user_categories(back_callback='catalog', page=1, categories_per_page=4,
+                                                  language=language_code, sex=sex)
         )
     else:
         await callback.message.edit_text(
             text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4, language=language_code)
+            reply_markup=await kb.user_categories(back_callback='catalog', page=1, categories_per_page=4,
+                                                  language=language_code, sex=sex)
         )
 
-
 @user_private.callback_query(F.data.startswith('usercategories_'))
-async def categories_pagination(callback: CallbackQuery):
+async def categories_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split('_')[1])
+    data = await state.get_data()
+    sex = data.get('sex', None)
+
     await callback.answer('')
 
     # Get the user's preferred language
@@ -115,7 +150,8 @@ async def categories_pagination(callback: CallbackQuery):
 
     await callback.message.edit_text(
         messages['category_menu'],
-        reply_markup=await kb.user_categories(back_callback='to_main', page=page, categories_per_page=4,language=language_code)
+        reply_markup=await kb.user_categories(back_callback='catalog', page=page, categories_per_page=4,
+                                              language=language_code, sex=sex)
     )
 
 
@@ -430,11 +466,11 @@ def register_handlers_user_private(bot: Bot):
         # Create the order
         new_order = await orm_create_order(user_id, total_cost)
 
-        # Constructing the order details text
+        # Constructing the order details text for the user
         language_code = await orm_get_user_language(callback.from_user.id)
         messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
-        text = f"{messages['order_id']}: {new_order.id}\n"
+        user_text = f"{messages['order_id']}: {new_order.id}\n"
 
         for item in order_items:
             product = await orm_get_product_by_id(item.product_id)
@@ -446,19 +482,39 @@ def register_handlers_user_private(bot: Bot):
             else:
                 product_name = product.name_ru
 
-            text += (
+            user_text += (
                 f"{messages['category']}: {category_name}\n"
                 f"{messages['product_name']}: {product_name}\n"
                 f"{messages['quantity']}: {item.quantity}\n"
                 f"{messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} Сум\n\n"
             )
 
-        text += f"{messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} Сум\n\n"
-        text += f"{messages['customer_name']}: {callback.from_user.first_name},\n{messages['id']}: {callback.from_user.id}\n{messages['phone']}: {user.phone_number}"
+        user_text += f"{messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} Сум\n\n"
+        user_text += f"{messages['customer_name']}: {callback.from_user.first_name},\n{messages['id']}: {callback.from_user.id}\n{messages['phone']}: {user.phone_number}"
+
+        # Constructing the order details text for the group chat in Russian
+        group_messages = MESSAGES['ru']
+        group_text = f"{group_messages['order_id']}: {new_order.id}\n"
+
+        for item in order_items:
+            product = await orm_get_product_by_id(item.product_id)
+            category_name = await orm_get_category_name(product.category_id, 'ru')
+
+            product_name = product.name_ru
+
+            group_text += (
+                f"{group_messages['category']}: {category_name}\n"
+                f"{group_messages['product_name']}: {product_name}\n"
+                f"{group_messages['quantity']}: {item.quantity}\n"
+                f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} Сум\n\n"
+            )
+
+        group_text += f"{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} Сум\n\n"
+        group_text += f"{group_messages['customer_name']}: {callback.from_user.first_name},\n{group_messages['id']}: {callback.from_user.id}\n{group_messages['phone']}: {user.phone_number}"
 
         # Send the message to all group chats
         for group_id in GROUP_CHAT_IDS:
-            await bot.send_message(chat_id=group_id, text=text)
+            await bot.send_message(chat_id=group_id, text=group_text)
 
         # Clear the user's basket
         await orm_clean_order_items_by_order_id(order_id)  # Implement this ORM function to clean the basket

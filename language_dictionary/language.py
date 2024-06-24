@@ -38,6 +38,7 @@ MESSAGES_RU = {
     'back': 'Назад',
     'basket_cleaned': 'Корзина Очищена',
     'basket_cleaned_confirmation': 'Корзина Пуста',
+    'choose_gender': 'Выберите тип категории Мужская или Женская',
 }
 
 
@@ -75,6 +76,11 @@ MESSAGES_UZ = {
     'back': 'Orqaga Qaytish',
     'basket_cleaned': 'Savat yangilandi',
     'basket_cleaned_confirmation': 'Savatingiz bush',
+    'choose_gender': 'Ayollarni kategoriyasimi Yo Erkaklarnikimi tanlang',
+}
+GENDER_MAPPING = {
+    'male': 'мужской',
+    'female': 'женский'
 }
 
 # Combined messages dictionary
