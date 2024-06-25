@@ -1,17 +1,13 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
-from database.orm_queries import orm_get_products_by_category_id, orm_count_products_by_category_id, \
-    orm_count_categories, orm_u_get_categories
-
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from language_dictionary.language import LANGUAGES, MESSAGES
+from language_dictionary.language import MESSAGES
+from database.orm_queries import orm_get_products_by_category_id, orm_count_products_by_category_id, \
+     orm_count_categories,  orm_u_get_categories
 
 ITEMS_PER_PAGE = 4
 all_categories = None
 
 
-# Создаем клавиатуру с кнопкой запроса контакта
 def get_contact_keyboard(language_code: str) -> ReplyKeyboardMarkup:
     if language_code == 'ru':
         keyboard = ReplyKeyboardMarkup(keyboard=[
@@ -26,7 +22,6 @@ def get_contact_keyboard(language_code: str) -> ReplyKeyboardMarkup:
             ]
         ], resize_keyboard=True)
     else:
-        # Default to Russian if language code is invalid
         keyboard = ReplyKeyboardMarkup(keyboard=[
             [
                 KeyboardButton(text='📱 Отправить мой номер телефона', request_contact=True)
@@ -81,15 +76,13 @@ admin_product_delete = InlineKeyboardMarkup(inline_keyboard=[
 
 
 def language_selection_keyboard() -> InlineKeyboardMarkup:
-    # Get flag emojis for Russia and Uzbekistan
-    flag_ru = "🇷🇺" # Emoji code for Russian flag
-    flag_uz = " 🇺🇿" # Emoji code for Uzbek flag
+    # Get flag emojis
+    flag_ru = "🇷🇺"
+    flag_uz = " 🇺🇿"
 
-    # Create buttons with flag emojis
     ru = InlineKeyboardButton(text=f"{flag_ru} Русский", callback_data="select_language_ru")
     uz = InlineKeyboardButton(text=f"{flag_uz} O'zbek", callback_data='select_language_uz')
 
-    # Create InlineKeyboardMarkup with the buttons
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [ru, uz],
     ])
@@ -113,6 +106,7 @@ def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMark
         buttons = []
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
@@ -148,7 +142,6 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-
 def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
@@ -169,10 +162,6 @@ def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
 
 
 # Generate Products
-
-
-
-
 async def generate_product_keyboard(category_id: int, page: int, items_per_page: int, callback_prefix: str,
                                     navigation_callback: str, items_per_row: int = 3, back_callback: str = '',
                                     language: str = 'ru'):
@@ -189,7 +178,7 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
         elif language == 'uz':
             product_name = product.name_uz
         else:
-            product_name = product.name_ru  # Default to Russian if language code is invalid
+            product_name = product.name_ru
 
         # Ensure callback_data length is within 64 characters
         callback_data = f'{callback_prefix}_{product.id}'
@@ -205,7 +194,7 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
         inline_keyboard.append(row)
 
     total_pages = (total_products + items_per_page - 1) // items_per_page
-    pagination_buttons = [None, None, None]  # To ensure the correct positioning of the buttons
+    pagination_buttons = [None, None, None]
 
     if page > 1:
         callback_data = f'{navigation_callback}_{category_id}_{page - 1}'
@@ -213,13 +202,13 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
             raise ValueError(f'callback_data length exceeds 64 characters: {callback_data}')
         pagination_buttons[0] = InlineKeyboardButton(text='⬅️', callback_data=callback_data)
 
-    if isinstance(back_callback, str) and back_callback:  # Ensure back_callback is a non-empty string
+    if isinstance(back_callback, str) and back_callback:
         if language == 'ru':
             back_to_categories_text = '⬇️'
         elif language == 'uz':
             back_to_categories_text = '⬇️'
         else:
-            back_to_categories_text = '⬇️'  # Default to Russian if language code is invalid
+            back_to_categories_text = '⬇️'
 
         if len(back_callback) > 64:
             raise ValueError(f'callback_data length exceeds 64 characters: {back_callback}')
@@ -237,8 +226,6 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
     inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
-
-
 
 
 async def products_by_category(category_id: int, page: int, items_per_row: int = 2):
@@ -276,7 +263,6 @@ def create_product_buttons(quantity: int, language_code: str = 'ru') -> InlineKe
     return markup
 
 
-
 async def generate_category_keyboard(page: int, categories_per_page: int, callback_prefix: str,
                                      navigation_callback: str, back_callback: str, language: str = 'ru', sex: str = None):
     offset = (page - 1) * categories_per_page
@@ -292,7 +278,7 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
         elif language == 'uz':
             category_name = category.name_uz
         else:
-            category_name = category.name_ru  # Default to Russian if language code is invalid
+            category_name = category.name_ru
 
         row.append(InlineKeyboardButton(text=category_name, callback_data=f'{callback_prefix}_{category.id}'))
         if len(row) == 2:
@@ -303,7 +289,7 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
         inline_keyboard.append(row)
 
     total_pages = (total_categories + categories_per_page - 1) // categories_per_page
-    pagination_buttons = [None, None, None]  # To ensure the correct positioning of the buttons
+    pagination_buttons = [None, None, None]
 
     if page > 1:
         pagination_buttons[0] = InlineKeyboardButton(text='⬅️', callback_data=f'{navigation_callback}_{page - 1}_{language}')
@@ -320,15 +306,11 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
 
     pagination_buttons[1] = InlineKeyboardButton(text=back_to_main_menu_text, callback_data=back_callback)
 
-    # Filter out None values and create a new list for arranged buttons
     arranged_pagination_buttons = [button for button in pagination_buttons if button is not None]
 
     inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
-
-
-
 
 
 async def admin_add_product_categories(page: int = 1, categories_per_page: int = 5):

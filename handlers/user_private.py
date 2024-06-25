@@ -1,21 +1,23 @@
+import locale
+import buttons.inline_buttons as kb
+from aiogram.filters import CommandStart
 from aiogram import types, Router, F, Bot
-from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.exc import SQLAlchemyError
+from aiogram.types import ReplyKeyboardRemove
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
-from aiogram.types import ReplyKeyboardRemove
-from aiogram.filters import CommandStart, Command, or_f
-import locale
-from sqlalchemy.exc import SQLAlchemyError
-from language_dictionary.language import MESSAGES, MESSAGES_RU, MESSAGES_UZ, GENDER_MAPPING
+from language_dictionary.language import MESSAGES, GENDER_MAPPING
+
+from database.orm_queries import orm_set_user,                           orm_get_product_by_id, orm_create_order_item, \
+     orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order,      orm_update_user, \
+     orm_get_user_by_tg_id,           orm_update_user_language,          orm_get_user_language, orm_get_category_name
+
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
-import buttons.inline_buttons as kb
-from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create_order_item, \
-    orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_update_user, \
-    orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name
-
 user_private = Router()
+GROUP_CHAT_IDS = [-4257083278]
+
 
 class LanguageState(StatesGroup):
     language = State()
@@ -53,7 +55,7 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.set_state(LanguageState.language)
         await state.update_data(language='ru')  # Default language
         await message.answer(
-            text="Вас приветсвует магазин Mosmade выберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz interfeys tilini tanlang.",
+            text="Вас приветсвует магазин Mosmade!\nВыберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz\nInterfeys tilini tanlang.",
             reply_markup=kb.language_selection_keyboard()
         )
 
@@ -355,7 +357,6 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Произошла ошибка при добавлении товара в корзину. Пожалуйста, попробуйте снова.")
 
 
-
 @user_private.callback_query(F.data == 'basket')
 async def basket_handler(callback: CallbackQuery, state: FSMContext):
     tg_id = callback.from_user.id
@@ -457,9 +458,6 @@ async def show_basket(callback_or_message, state: FSMContext):
     text += f"{messages['total_order_cost']}: {formatted_total_cost} Сум"
 
     await message.answer(text, reply_markup=kb.create_basket_buttons(language_code))
-
-
-GROUP_CHAT_IDS = [-4257083278]
 
 
 def register_handlers_user_private(bot: Bot):
