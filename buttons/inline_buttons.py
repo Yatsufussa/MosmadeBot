@@ -77,11 +77,7 @@ admin_product_delete = InlineKeyboardMarkup(inline_keyboard=[
 ])
 # endregion
 
-# def language_selection_keyboard():
-#     keyboard = InlineKeyboardMarkup()
-#     for lang_code, lang_name in LANGUAGES.items():
-#         keyboard.add(InlineKeyboardButton(text=lang_name, callback_data=f'select_language_{lang_code}'))
-#     return keyboard
+
 
 
 def language_selection_keyboard() -> InlineKeyboardMarkup:
@@ -103,14 +99,14 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
 def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
-            [InlineKeyboardButton(text="Мужчины", callback_data='gender_male'),
-            InlineKeyboardButton(text="Женщины", callback_data='gender_female')],
+            [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='gender_male'),
+            InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='gender_female')],
             [InlineKeyboardButton(text="Назад", callback_data='to_main')],
         ]
     elif language_code == 'uz':
         buttons = [
-            [InlineKeyboardButton(text="Erkaklar", callback_data='gender_male'),
-            InlineKeyboardButton(text="Ayollar", callback_data='gender_female')],
+            [InlineKeyboardButton(text="🧑🏻‍🦰 Erkaklar", callback_data='gender_male'),
+            InlineKeyboardButton(text="👩🏻‍🦰 Ayollar", callback_data='gender_female')],
             [InlineKeyboardButton(text="Orqaga", callback_data='to_main')],
         ]
     else:
@@ -121,29 +117,29 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [
-                InlineKeyboardButton(text="Каталог", callback_data='catalog'),
-                InlineKeyboardButton(text="Контакты", callback_data='contacts')
+                InlineKeyboardButton(text="🚀Каталог", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️Контакты", callback_data='contacts')
             ],
             [
-                InlineKeyboardButton(text="Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="Наши Ткани", callback_data='textile')
+                InlineKeyboardButton(text="🛒Корзина", callback_data='basket'),
+                InlineKeyboardButton(text="🪡Наши Ткани", callback_data='textile')
             ],
             [
-                InlineKeyboardButton(text="Язык", callback_data='language')
+                InlineKeyboardButton(text="⚙️Язык", callback_data='language')
             ]
         ]
     elif language_code == 'uz':
         buttons = [
             [
-                InlineKeyboardButton(text="Katalog", callback_data='catalog'),
-                InlineKeyboardButton(text="Aloqalar", callback_data='contacts')
+                InlineKeyboardButton(text="🚀Katalog", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️Aloqalar", callback_data='contacts')
             ],
             [
-                InlineKeyboardButton(text="Savat", callback_data='basket'),
-                InlineKeyboardButton(text="Matolarimiz", callback_data='textile')
+                InlineKeyboardButton(text="🛒Savat", callback_data='basket'),
+                InlineKeyboardButton(text="🪡Matolarimiz", callback_data='textile')
             ],
             [
-                InlineKeyboardButton(text="Til", callback_data='language')
+                InlineKeyboardButton(text="⚙️Til", callback_data='language')
             ]
         ]
     else:
@@ -156,15 +152,15 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
 def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
-            [InlineKeyboardButton(text='Купить', callback_data='buy_product'),
-             InlineKeyboardButton(text='Добавить еще', callback_data='private_add_product')],
-            [InlineKeyboardButton(text='Очистить Корзину', callback_data='clean_basket')],
+            [InlineKeyboardButton(text='💰Купить', callback_data='buy_product'),
+             InlineKeyboardButton(text='🛍Добавить еще', callback_data='private_add_product')],
+            [InlineKeyboardButton(text='🗑Очистить Корзину', callback_data='clean_basket')],
         ]
     elif language_code == 'uz':
         buttons = [
-            [InlineKeyboardButton(text='Sotib olish', callback_data='buy_product'),
-             InlineKeyboardButton(text="Qo'shimcha qo'shish", callback_data='private_add_product')],
-            [InlineKeyboardButton(text='Savatni tozalash', callback_data='clean_basket')],
+            [InlineKeyboardButton(text='💰Sotib olish', callback_data='buy_product'),
+             InlineKeyboardButton(text="🛍Qo'shimcha qo'shish", callback_data='private_add_product')],
+            [InlineKeyboardButton(text='🗑Savatni tozalash', callback_data='clean_basket')],
         ]
     else:
         buttons = []
@@ -209,50 +205,39 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
         inline_keyboard.append(row)
 
     total_pages = (total_products + items_per_page - 1) // items_per_page
-    pagination_buttons = []
+    pagination_buttons = [None, None, None]  # To ensure the correct positioning of the buttons
 
     if page > 1:
         callback_data = f'{navigation_callback}_{category_id}_{page - 1}'
         if len(callback_data) > 64:
             raise ValueError(f'callback_data length exceeds 64 characters: {callback_data}')
-        pagination_buttons.append(
-            InlineKeyboardButton(text='⬅️ Назад', callback_data=callback_data)
-        )
+        pagination_buttons[0] = InlineKeyboardButton(text='⬅️', callback_data=callback_data)
 
     if isinstance(back_callback, str) and back_callback:  # Ensure back_callback is a non-empty string
         if language == 'ru':
-            back_to_categories_text = 'Назад к Категориям'
+            back_to_categories_text = '⬇️'
         elif language == 'uz':
-            back_to_categories_text = 'Kategoriyalarga qaytish'
+            back_to_categories_text = '⬇️'
         else:
-            back_to_categories_text = 'Назад к Категориям'  # Default to Russian if language code is invalid
+            back_to_categories_text = '⬇️'  # Default to Russian if language code is invalid
 
         if len(back_callback) > 64:
             raise ValueError(f'callback_data length exceeds 64 characters: {back_callback}')
-        pagination_buttons.append(
-            InlineKeyboardButton(text=back_to_categories_text, callback_data=back_callback)
-        )
+        pagination_buttons[1] = InlineKeyboardButton(text=back_to_categories_text, callback_data=back_callback)
 
     if page < total_pages:
         callback_data = f'{navigation_callback}_{category_id}_{page + 1}'
         if len(callback_data) > 64:
             raise ValueError(f'callback_data length exceeds 64 characters: {callback_data}')
-        pagination_buttons.append(
-            InlineKeyboardButton(text='➡️ Далее', callback_data=callback_data)
-        )
+        pagination_buttons[2] = InlineKeyboardButton(text='➡️', callback_data=callback_data)
 
-    # Arrange buttons: previous on the left, back in the middle, next on the right
-    arranged_pagination_buttons = []
-    if len(pagination_buttons) == 1:
-        arranged_pagination_buttons = [pagination_buttons[0]]
-    elif len(pagination_buttons) == 2:
-        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1]]
-    elif len(pagination_buttons) == 3:
-        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1], pagination_buttons[2]]
+    # Filter out None values and create a new list for arranged buttons
+    arranged_pagination_buttons = [button for button in pagination_buttons if button is not None]
 
     inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
 
 
 
@@ -277,12 +262,14 @@ def create_product_buttons(quantity: int, language_code: str = 'ru') -> InlineKe
     plus = InlineKeyboardButton(text="➕", callback_data='plus_one')
     summa = InlineKeyboardButton(text=f"{quantity}", callback_data='summa')
     minus = InlineKeyboardButton(text="➖", callback_data='minus')
-    dobavit_v_korzinu = InlineKeyboardButton(text=messages['add_to_basket'], callback_data='dobavit_v_korzinu')
+    add_to_cart = InlineKeyboardButton(text=messages['add_to_basket'], callback_data='dobavit_v_korzinu')
+    show_cart = InlineKeyboardButton(text=messages['show_basket'], callback_data='basket')
     exit_button = InlineKeyboardButton(text=messages['back'], callback_data='catalog')
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [minus, summa, plus],
-        [dobavit_v_korzinu],
+        [add_to_cart],
+        [show_cart],
         [exit_button]
     ])
 
@@ -295,10 +282,6 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
     offset = (page - 1) * categories_per_page
     all_categories = await orm_u_get_categories(offset, categories_per_page, sex)
     total_categories = await orm_count_categories(sex)
-
-    # Debug: Print categories and total count
-    print(f"Gender: {sex}, Offset: {offset}, Limit: {categories_per_page}")
-    print(f"All categories: {all_categories}, Total categories: {total_categories}")
 
     inline_keyboard = []
     row = []
@@ -320,41 +303,31 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
         inline_keyboard.append(row)
 
     total_pages = (total_categories + categories_per_page - 1) // categories_per_page
-    pagination_buttons = []
+    pagination_buttons = [None, None, None]  # To ensure the correct positioning of the buttons
 
     if page > 1:
-        pagination_buttons.append(
-            InlineKeyboardButton(text='⬅️ Назад', callback_data=f'{navigation_callback}_{page - 1}_{language}')
-        )
+        pagination_buttons[0] = InlineKeyboardButton(text='⬅️', callback_data=f'{navigation_callback}_{page - 1}_{language}')
 
     if page < total_pages:
-        pagination_buttons.append(
-            InlineKeyboardButton(text='➡️ Далее', callback_data=f'{navigation_callback}_{page + 1}_{language}')
-        )
+        pagination_buttons[2] = InlineKeyboardButton(text='➡️', callback_data=f'{navigation_callback}_{page + 1}_{language}')
 
     if language == 'ru':
-        back_to_main_menu_text = 'Назад'
+        back_to_main_menu_text = '⬇️'
     elif language == 'uz':
-        back_to_main_menu_text = 'Orqaga'
+        back_to_main_menu_text = '⬇️'
     else:
-        back_to_main_menu_text = 'Назад'  # Default to Russian if language code is invalid
+        back_to_main_menu_text = '⬇️'  # Default to Russian if language code is invalid
 
-    pagination_buttons.append(
-        InlineKeyboardButton(text=back_to_main_menu_text, callback_data=back_callback)
-    )
+    pagination_buttons[1] = InlineKeyboardButton(text=back_to_main_menu_text, callback_data=back_callback)
 
-    # Arrange buttons: previous on the left, back in the middle, next on the right
-    arranged_pagination_buttons = []
-    if len(pagination_buttons) == 1:
-        arranged_pagination_buttons = [pagination_buttons[0]]
-    elif len(pagination_buttons) == 2:
-        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[1]]
-    elif len(pagination_buttons) == 3:
-        arranged_pagination_buttons = [pagination_buttons[0], pagination_buttons[2], pagination_buttons[1]]
+    # Filter out None values and create a new list for arranged buttons
+    arranged_pagination_buttons = [button for button in pagination_buttons if button is not None]
 
     inline_keyboard.append(arranged_pagination_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
+
 
 
 

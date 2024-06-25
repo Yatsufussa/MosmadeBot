@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command, or_f
 import locale
-
+from sqlalchemy.exc import SQLAlchemyError
 from language_dictionary.language import MESSAGES, MESSAGES_RU, MESSAGES_UZ, GENDER_MAPPING
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
@@ -41,11 +41,22 @@ class Form(StatesGroup):
 
 @user_private.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    await orm_set_user(message.from_user.id)  # Assuming orm.set_user() registers the user
-    await state.set_state(LanguageState.language)
-    await state.update_data(language='ru')  # Default language
-    await message.answer(text="Вас приветсвует магазин Mosmade выберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz interfeys tilini tanlang.",
-                         reply_markup=kb.language_selection_keyboard())
+    tg_id = message.from_user.id
+    user = await orm_get_user_by_tg_id(tg_id)
+
+    if user:
+        language_code = user.language  # Assuming the user object has a language attribute
+        await state.update_data(language=language_code)
+        await to_main(message, state, first_time=True)
+    else:
+        await orm_set_user(tg_id)  # Assuming orm.set_user() registers the user
+        await state.set_state(LanguageState.language)
+        await state.update_data(language='ru')  # Default language
+        await message.answer(
+            text="Вас приветсвует магазин Mosmade выберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz interfeys tilini tanlang.",
+            reply_markup=kb.language_selection_keyboard()
+        )
+
 
 @user_private.callback_query(F.data.startswith('select_language_'))
 async def select_language(callback: CallbackQuery, state: FSMContext):
@@ -53,30 +64,28 @@ async def select_language(callback: CallbackQuery, state: FSMContext):
     await state.update_data(language=language_code)
     await orm_update_user_language(callback.from_user.id, language_code)  # Update user language in DB
     await callback.answer('')
-    await callback.message.edit_text(MESSAGES[language_code]['language_selected'], reply_markup= kb.main_menu_keyboard(language_code))
+    await callback.message.edit_text(MESSAGES[language_code]['language_selected'],
+                                     reply_markup=kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'to_main')
-async def to_main(callback: CallbackQuery, state: FSMContext):
+async def to_main(callback: CallbackQuery, state: FSMContext, first_time=False):
+    tg_id = callback.from_user.id if not first_time else callback.from_user.id
     message_type = (await state.get_data()).get('message_type', 'text')
 
-    # Assuming orm_get_user_language is defined to get user language from the database
-    language_code = await orm_get_user_language(callback.from_user.id)
+    language_code = await orm_get_user_language(tg_id)
     await state.update_data(language_code=language_code)
-    # Fetch messages in the user's preferred language
     messages = MESSAGES.get(language_code, MESSAGES['ru'])  # Default to Russian if language code is not found
-
-    if language_code == 'uz':
-        messages = MESSAGES_UZ
-    else:
-        messages = MESSAGES_RU
 
     if message_type == 'photo':
         # Delete photo message
         await callback.message.delete()
         await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
     else:
-        await callback.message.edit_text(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+        if first_time:
+            await callback.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+        else:
+            await callback.message.edit_text(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
     await state.update_data(message_type='text')
 
@@ -133,7 +142,7 @@ async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             text=messages['category_menu'],
             reply_markup=await kb.user_categories(back_callback='catalog', page=1, categories_per_page=4,
-                                                  language=language_code, sex=sex)
+                                                  language=language_code, sex=sex),
         )
 
 @user_private.callback_query(F.data.startswith('usercategories_'))
@@ -315,37 +324,36 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     product_id = data.get('product_id')
     quantity = data.get('quantity', 1)  # Default quantity is 1 if not set
+    order_id = data.get('order_id')
+    try:
+        product = await orm_get_product_by_id(product_id)
+        if not product:
+            await callback.answer("Продукт не найден")
+            return
 
-    # Assuming you have the order_id available in the state or retrieved somehow
-    order_id = data.get('order_id')  # Replace with actual method to get the current order_id
+        total_cost = product.price * quantity
 
-    product = await orm_get_product_by_id(product_id)
-    if not product:
-        await callback.answer("Продукт не найден")
-        return
+        # Store the order item in the database
+        await orm_create_order_item(order_id, product_id, quantity, total_cost)
 
-    total_cost = product.price * quantity
+        language_code = await orm_get_user_language(callback.from_user.id)
 
-    # Store the order item in the database
-    await orm_create_order_item(order_id, product_id, quantity, total_cost)
+        if language_code == 'uz':
+            product_name = product.name_uz
+            added_to_cart_message = (
+                f"Korzinaga qo'shildi: {product_name} (Soni: {quantity}, Umumiy narxi: {total_cost} Сум)"
+            )
+        else:  # Default to Russian if language code is not recognized
+            product_name = product.name_ru
+            added_to_cart_message = (
+                f"Добавлено в корзину: {product_name} (Количество: {quantity}, Общая стоимость: {total_cost} Сум)"
+            )
+        await callback.answer(added_to_cart_message)
 
-    # Get the user's preferred language
-    language_code = await orm_get_user_language(callback.from_user.id)
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+    except SQLAlchemyError as e:
+        print(f"Database error: {e}")
+        await callback.answer("Произошла ошибка при добавлении товара в корзину. Пожалуйста, попробуйте снова.")
 
-    # Select the correct language fields for product name and response
-    if language_code == 'uz':
-        product_name = product.name_uz
-        added_to_cart_message = (
-            f"Korzinaga qo'shildi: {product_name} (Soni: {quantity}, Umumiy narxi: {total_cost} Сум)"
-        )
-    else:  # Default to Russian if language code is not recognized
-        product_name = product.name_ru
-        added_to_cart_message = (
-            f"Добавлено в корзину: {product_name} (Количество: {quantity}, Общая стоимость: {total_cost} Сум)"
-        )
-
-    await callback.answer(added_to_cart_message)
 
 
 @user_private.callback_query(F.data == 'basket')
@@ -357,6 +365,7 @@ async def basket_handler(callback: CallbackQuery, state: FSMContext):
     language_code = await orm_get_user_language(tg_id)
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
+    # Check if user phone number is missing
     if not user.phone_number:
         await state.set_state(OrderState.waiting_for_phone_number)
         await callback.message.answer(
@@ -365,25 +374,31 @@ async def basket_handler(callback: CallbackQuery, state: FSMContext):
         )
         return
 
+    # Show basket if phone number is available
     await show_basket(callback, state)
 
 
 @user_private.message(OrderState.waiting_for_phone_number, F.contact)
 async def process_phone_number_contact(message: Message, state: FSMContext):
-    contact = message.contact
-    phone_number = contact.phone_number
+    phone_number = message.contact.phone_number
     tg_id = message.from_user.id
+    language_code = await orm_get_user_language(tg_id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
     # Update the user's phone number in the database
     user = await orm_get_user_by_tg_id(tg_id)
     user.phone_number = phone_number
     await orm_update_user(user)
 
+    # Confirm saving the phone number
+    await message.answer(messages['number_saved'],)
+
+    # Proceed to show the basket
     await show_basket(message, state)
 
 
 @user_private.message(OrderState.waiting_for_phone_number, F.data)
-async def process_phone_number_text(message: Message, state: FSMContext):
+async def process_phone_number_text(message: Message):
     await message.answer("Нажмите на кнопку, чтобы отправить контакт или отправьте в формате.")
 
 
@@ -441,7 +456,7 @@ async def show_basket(callback_or_message, state: FSMContext):
 
     text += f"{messages['total_order_cost']}: {formatted_total_cost} Сум"
 
-    await message.edit_text(text, reply_markup=kb.create_basket_buttons(language_code))
+    await message.answer(text, reply_markup=kb.create_basket_buttons(language_code))
 
 
 GROUP_CHAT_IDS = [-4257083278]
