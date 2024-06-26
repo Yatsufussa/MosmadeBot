@@ -1,6 +1,6 @@
 import locale
 import buttons.inline_buttons as kb
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, or_f, Command
 from aiogram import types, Router, F, Bot
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,10 +9,9 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
 from language_dictionary.language import MESSAGES, GENDER_MAPPING
 
-from database.orm_queries import orm_set_user,                           orm_get_product_by_id, orm_create_order_item, \
-     orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order,      orm_update_user, \
-     orm_get_user_by_tg_id,           orm_update_user_language,          orm_get_user_language, orm_get_category_name
-
+from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create_order_item, \
+    orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_update_user, \
+    orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
@@ -21,6 +20,7 @@ GROUP_CHAT_IDS = [-4257083278]
 
 class LanguageState(StatesGroup):
     language = State()
+
 
 class OrderState(StatesGroup):
     waiting_for_phone_number = State()
@@ -43,6 +43,25 @@ class Form(StatesGroup):
 
 @user_private.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
+    tg_id = message.from_user.id
+    user = await orm_get_user_by_tg_id(tg_id)
+
+    if user:
+        language_code = user.language  # Assuming the user object has a language attribute
+        await state.update_data(language=language_code)
+        await to_main(message, state, first_time=True)
+    else:
+        await orm_set_user(tg_id)  # Assuming orm.set_user() registers the user
+        await state.set_state(LanguageState.language)
+        await state.update_data(language='ru')  # Default language
+        await message.answer(
+            text="Вас приветсвует магазин Mosmade!\nВыберите язык интерфейса.\n\n\nMosmade do'koniga hush kelibsiz\nInterfeys tilini tanlang.",
+            reply_markup=kb.language_selection_keyboard()
+        )
+
+
+@user_private.message(or_f(Command("start"), (F.text.lower() == "start")))
+async def menu_cmd(message: types.Message, state: FSMContext):
     tg_id = message.from_user.id
     user = await orm_get_user_by_tg_id(tg_id)
 
@@ -117,7 +136,6 @@ async def catalog(callback: CallbackQuery, state: FSMContext):
         )
 
 
-
 @user_private.callback_query(F.data.startswith('gender_'))
 async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
     gender = callback.data.split('_')[1]
@@ -146,6 +164,7 @@ async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
             reply_markup=await kb.user_categories(back_callback='catalog', page=1, categories_per_page=4,
                                                   language=language_code, sex=sex),
         )
+
 
 @user_private.callback_query(F.data.startswith('usercategories_'))
 async def categories_pagination(callback: CallbackQuery, state: FSMContext):
@@ -178,7 +197,8 @@ async def category(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(
         messages['product_menu'],
-        reply_markup=await kb.items(category_id, page=1, items_per_row=3, language=language_code, back_callback='catalog')
+        reply_markup=await kb.items(category_id, page=1, items_per_row=3, language=language_code,
+                                    back_callback='catalog')
     )
 
 
@@ -198,10 +218,6 @@ async def category_pagination(callback: CallbackQuery, state: FSMContext):
         messages['product_menu'],
         reply_markup=await kb.items(category_id, page, language=language_code, back_callback='catalog')
     )
-
-
-
-
 
 
 @user_private.callback_query(F.data.startswith('item_'))
@@ -227,13 +243,13 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
         text = (
             f"{messages['product_name']}: {product_name}\n"
             f"{messages['product_description']}: {product_description}\n"
-            f"{messages['product_price']}: {price_formatted} Сум\n"
+            f"{messages['product_price']}: {price_formatted} {messages['currency']}\n"
             f"{messages['product_quantity']}: {1}\n\n"  # Default quantity is set to 1
         )
         if product.image_url:
             data = await state.get_data()
             quantity = data.get('quantity', 1)
-            keyboard = kb.create_product_buttons(quantity, language_code = language_code)
+            keyboard = kb.create_product_buttons(quantity, language_code=language_code)
             await state.update_data(message_type='photo')  # Update state with message type
             await callback.message.delete()
             await callback.message.answer_photo(photo=product.image_url, caption=text, reply_markup=keyboard)
@@ -243,7 +259,8 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4, language=language_code)
+            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+                                                  language=language_code)
         )
 
 
@@ -269,25 +286,28 @@ async def update_product_text(callback: CallbackQuery, state: FSMContext):
             product_description = product.description_ru
 
         total_price = product.price * quantity
-        total_price_formatted = locale.format_string('%d', total_price, grouping=True)  # Format total price without decimals
+        total_price_formatted = locale.format_string('%d', total_price,
+                                                     grouping=True)  # Format total price without decimals
 
         text = (
             f"{messages['product_name']}: {product_name}\n"
             f"{messages['product_description']}: {product_description}\n"
-            f"{messages['product_price']}: {total_price_formatted} Сум\n"
+            f"{messages['product_price']}: {total_price_formatted} {messages['currency']}\n"
             f"{messages['product_quantity']}: {quantity}\n\n"
         )
 
         if product.image_url:
-            keyboard = kb.create_product_buttons(quantity,language_code)
+            keyboard = kb.create_product_buttons(quantity, language_code)
             await callback.message.edit_caption(caption=text, reply_markup=keyboard)
         else:
             await callback.message.edit_text(text, reply_markup=None)
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4, language=language_code)
+            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+                                                  language=language_code)
         )
+
 
 # Function to handle plus one
 @user_private.callback_query(F.data == 'plus_one')
@@ -343,7 +363,7 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
         if language_code == 'uz':
             product_name = product.name_uz
             added_to_cart_message = (
-                f"Korzinaga qo'shildi: {product_name} (Soni: {quantity}, Umumiy narxi: {total_cost} Сум)"
+                f"Korzinaga qo'shildi: {product_name} (Soni: {quantity}, Umumiy narxi: {total_cost} So'm)"
             )
         else:  # Default to Russian if language code is not recognized
             product_name = product.name_ru
@@ -392,7 +412,7 @@ async def process_phone_number_contact(message: Message, state: FSMContext):
     await orm_update_user(user)
 
     # Confirm saving the phone number
-    await message.answer(messages['number_saved'],)
+    await message.answer(messages['number_saved'], )
 
     # Proceed to show the basket
     await show_basket(message, state)
@@ -447,15 +467,15 @@ async def show_basket(callback_or_message, state: FSMContext):
         formatted_item_cost = locale.format_string('%d', item_cost, grouping=True)
 
         text += (
-            f"{messages['product_name']}: {product_name}\n"
-            f"{messages['product_price']}: {formatted_price} Сум x {messages['product_quantity']}: {item.quantity} = "
-            f"{messages['total_cost']}: {formatted_item_cost} Сум\n\n"
+            f"{messages['product_name']}: {product_name}\n\n"
+            f"{messages['product_price']}: {formatted_price} {messages['currency']}.\n{messages['product_quantity']}: {item.quantity}\n"
+            f"{messages['total_cost']}: {formatted_item_cost} {messages['currency']}\n\n"
         )
 
     # Format total order cost with thousands separator
     formatted_total_cost = locale.format_string('%d', total_cost, grouping=True)
 
-    text += f"{messages['total_order_cost']}: {formatted_total_cost} Сум"
+    text += f"{messages['total_order_cost']}: {formatted_total_cost} {messages['currency']}"
 
     await message.answer(text, reply_markup=kb.create_basket_buttons(language_code))
 
@@ -467,7 +487,7 @@ def register_handlers_user_private(bot: Bot):
         order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
         user = await orm_get_user_by_tg_id(callback.from_user.id)
         user_id = user.id
-
+        await callback.message.answer(callback.from_user.username)
         # Get all order items for this order
         order_items = await orm_get_order_items_by_order_id(order_id)
         if not order_items:
@@ -499,11 +519,13 @@ def register_handlers_user_private(bot: Bot):
                 f"{messages['category']}: {category_name}\n"
                 f"{messages['product_name']}: {product_name}\n"
                 f"{messages['quantity']}: {item.quantity}\n"
-                f"{messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} Сум\n\n"
+                f"{messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {messages['currency']}\n\n"
             )
 
-        user_text += f"{messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} Сум\n\n"
-        user_text += f"{messages['customer_name']}: {callback.from_user.first_name},\n{messages['id']}: {callback.from_user.id}\n{messages['phone']}: {user.phone_number}"
+        user_text += f"{messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
+        user_text += (f"{messages['customer_name']}: {callback.from_user.first_name},"
+                      f"\n{messages['username']}: {callback.from_user.username}\n"
+                      f"{messages['phone']}: {user.phone_number}")
 
         # Constructing the order details text for the group chat in Russian
         group_messages = MESSAGES['ru']
@@ -519,11 +541,18 @@ def register_handlers_user_private(bot: Bot):
                 f"{group_messages['category']}: {category_name}\n"
                 f"{group_messages['product_name']}: {product_name}\n"
                 f"{group_messages['quantity']}: {item.quantity}\n"
-                f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} Сум\n\n"
+                f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {messages['currency']}\n\n"
             )
-
-        group_text += f"{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} Сум\n\n"
-        group_text += f"{group_messages['customer_name']}: {callback.from_user.first_name},\n{group_messages['id']}: {callback.from_user.id}\n{group_messages['phone']}: {user.phone_number}"
+        if user.language == 'uz':
+            group_text += f"💰{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
+            group_text += (f"🇺🇿{group_messages['customer_name']}: {callback.from_user.first_name},\n"
+                           f"{group_messages['username']}: @{callback.from_user.username}\n"
+                           f"☎️{group_messages['phone']}: {user.phone_number}")
+        else:
+            group_text += f"💰{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
+            group_text += (f"🇷🇺{group_messages['customer_name']}: {callback.from_user.first_name},\n"
+                           f"{group_messages['username']}: @{callback.from_user.username}\n"
+                           f"☎️{group_messages['phone']}: {user.phone_number}\n")
 
         # Send the message to all group chats
         for group_id in GROUP_CHAT_IDS:
@@ -535,22 +564,20 @@ def register_handlers_user_private(bot: Bot):
         await callback.message.edit_text(messages['order_sent_confirmation'])
 
 
-
 @user_private.callback_query(F.data == 'clean_basket')
 async def clean_basket(callback: CallbackQuery, state: FSMContext):
-        data = await state.get_data()
-        order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
+    data = await state.get_data()
+    order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
 
-        # Clear the user's basket
-        await orm_clean_order_items_by_order_id(order_id)  # Implement this ORM function to clean the basket
+    # Clear the user's basket
+    await orm_clean_order_items_by_order_id(order_id)  # Implement this ORM function to clean the basket
 
-        # Provide feedback to the user
-        language_code = await orm_get_user_language(callback.from_user.id)
-        messages = MESSAGES.get(language_code, MESSAGES['ru'])
-        await callback.answer(messages['basket_cleaned'])
-        await callback.message.edit_text(messages['basket_cleaned_confirmation'])
-        await callback.message.edit_text(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
-
+    # Provide feedback to the user
+    language_code = await orm_get_user_language(callback.from_user.id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+    await callback.answer(messages['basket_cleaned'])
+    await callback.message.edit_text(messages['basket_cleaned_confirmation'])
+    await callback.message.edit_text(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
 @user_private.message(Order.get_orders)
@@ -560,29 +587,31 @@ async def get_orders(message: types.Message, state: FSMContext):
 
 
 @user_private.callback_query(F.data == 'textile')
-async def buy_product(callback: CallbackQuery, state: FSMContext):
+async def get_textile(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     language_code = await orm_get_user_language(callback.from_user.id)
     await callback.message.answer('https://telegra.ph/Mosmade-06-14')
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
-    await callback.message.answer(messages['welcome'], reply_markup= kb.main_menu_keyboard(language_code))
+    await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'contacts')
-async def buy_product(callback: CallbackQuery, state: FSMContext):
+async def get_contact_help(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     language_code = await orm_get_user_language(callback.from_user.id)
     await callback.message.answer('https://t.me/ruslan_mukhtasimov')
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
-    await callback.message.answer(messages['welcome'], reply_markup= kb.main_menu_keyboard(language_code))
+    await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+
 
 @user_private.callback_query(F.data == 'language')
-async def buy_product(callback: CallbackQuery, state: FSMContext):
+async def choose_language(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await callback.message.answer("Выберите Язык\nTilni tanlang", reply_markup=kb.language_selection_keyboard())
 
+
 @user_private.callback_query(F.data == 'private_add_product')
-async def to_category(callback: CallbackQuery,state: FSMContext):
+async def to_category(callback: CallbackQuery, state: FSMContext):
     await callback.answer('')
     data = await state.get_data()
     message_type = data.get('message_type', 'text')

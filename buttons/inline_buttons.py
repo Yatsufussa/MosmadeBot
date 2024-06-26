@@ -39,10 +39,10 @@ admin_main = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 admin_category = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text='Добавить Категорию', callback_data='add_category'),
-     InlineKeyboardButton(text='Изменить Категорию', callback_data='change_category')],
-    [InlineKeyboardButton(text='Удалить Категорию', callback_data='delete_category'),
-     InlineKeyboardButton(text='На главную Админ панель', callback_data='to_admin_main')]
+    [InlineKeyboardButton(text='Добавить', callback_data='add_category'),
+     InlineKeyboardButton(text='Изменить', callback_data='change_category')],
+    [InlineKeyboardButton(text='Удалить', callback_data='delete_category'),
+     InlineKeyboardButton(text='Назад', callback_data='to_admin_main')]
 ])
 
 admin_category_change = InlineKeyboardMarkup(inline_keyboard=[
@@ -55,7 +55,7 @@ admin_product = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Добавить Товар', callback_data='add_product'),
      InlineKeyboardButton(text='Изменить Товар', callback_data='change_product')],
     [InlineKeyboardButton(text='Удалить Товар', callback_data='delete_product'),
-     InlineKeyboardButton(text='На главную', callback_data='to_admin_main')]
+     InlineKeyboardButton(text='Назад', callback_data='to_admin_main')]
 ])
 
 admin_product_change = InlineKeyboardMarkup(inline_keyboard=[
@@ -111,7 +111,7 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [
-                InlineKeyboardButton(text="🚀Каталог", callback_data='catalog'),
+                    InlineKeyboardButton(text="🚀Каталог", callback_data='catalog'),
                 InlineKeyboardButton(text="☎️Контакты", callback_data='contacts')
             ],
             [

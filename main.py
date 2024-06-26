@@ -1,21 +1,15 @@
-import asyncio
 import os
-
-from aiogram import Bot, Dispatcher
-
-from dotenv import find_dotenv, load_dotenv
-
+import asyncio
+from common.bot_cmds_list import private
 from middleware.db import DataBaseSession
-
+from aiogram import Bot, Dispatcher, types
+from dotenv import find_dotenv, load_dotenv
+from handlers.admin_private import admin_router
+from handlers.user_group import user_group_router
+from database.engine import create_db, drop_db, SessionMaker
+from handlers.user_private import user_private, register_handlers_user_private
 
 load_dotenv(find_dotenv())
-
-from handlers.user_private import user_private, register_handlers_user_private
-from handlers.user_group import user_group_router
-from handlers.admin_private import admin_router
-from database.engine import create_db, drop_db, SessionMaker
-
-from common.bot_commands import private
 
 ALLOWED_UPDATES = ['message, edited_message']
 
@@ -45,7 +39,7 @@ async def main():
     dp.update.middleware(DataBaseSession(session_pool=SessionMaker))
     # await bot.delete_my_commands(scope=types.BotCommandScopeAllPrivateChats())
     await bot.delete_webhook(drop_pending_updates=True)
-    # await bot.set_my_commands(commands=private, scope=types.BotCommandScopeAllPrivateChats())
+    await bot.set_my_commands(commands=private, scope=types.BotCommandScopeAllPrivateChats())
     await dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
 
 asyncio.run(main())

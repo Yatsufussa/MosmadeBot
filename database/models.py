@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey
 from sqlalchemy.sql import func
-from sqlalchemy.orm import sessionmaker, declared_attr, DeclarativeBase, relationship
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn
+from sqlalchemy.orm import declared_attr, relationship
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):

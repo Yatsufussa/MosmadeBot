@@ -1,18 +1,21 @@
 import buttons.inline_buttons as kb
-
+import pandas as pd
+import tempfile
 from database.engine import *
 from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message, InputFile
+from aiogram.types.input_file import FSInputFile
 from ChatFilter.chat_type import ChatTypeFilter, IsAdmin
 
 from database.orm_queries import orm_add_category, orm_delete_category, \
-    orm_get_category_by_id, orm_add_product, orm_get_product_by_id, orm_update_product_name, \
+    orm_get_category_by_id, orm_add_product, orm_get_product_by_id, \
     orm_update_product_price, orm_update_product_photo, orm_delete_product_by_id, \
     orm_update_category_sex, orm_update_category_name_ru, orm_update_category_name_uz, \
-    orm_update_product_description_uz, orm_update_product_description_ru
+    orm_update_product_description_uz, orm_update_product_description_ru, orm_update_product_name_ru, \
+    orm_update_product_name_uz, get_all_orders_with_details
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -523,7 +526,7 @@ async def set_new_product_name(message: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data.get('product_id')
 
-    updated = await orm_update_product_name(product_id, new_name_ru)
+    updated = await orm_update_product_name_ru(product_id, new_name_ru)
 
     if updated:
         await message.answer(f'Имя продукта обновлено на {new_name_ru}.\n\nВведите имя на UZ',
@@ -539,7 +542,7 @@ async def set_new_product_name(message: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data.get('product_id')
 
-    updated = await orm_update_product_name(product_id, new_name_uz)
+    updated = await orm_update_product_name_uz(product_id, new_name_uz)
 
     if updated:
         await message.answer(f'Имя продукта обновлено на {new_name_uz}.(UZ)', reply_markup=kb.admin_product)
@@ -590,7 +593,7 @@ async def set_new_product_description(message: Message, state: FSMContext):
 async def start_change_product_price(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ChangeProduct.ch_price)
     await callback.answer('')
-    await callback.message.answer('Введите новое имя продукта', reply_markup=ReplyKeyboardRemove())
+    await callback.message.answer('Введите цену товара в Сумах', reply_markup=ReplyKeyboardRemove())
 
 
 @admin_router.message(ChangeProduct.ch_price)
@@ -603,7 +606,7 @@ async def set_new_product_price(message: Message, state: FSMContext):
         updated = await orm_update_product_price(session, product_id, new_price)
 
     if updated:
-        await message.answer(f'Имя категории обновлено на {new_price}.', reply_markup=kb.admin_product)
+        await message.answer(f'Новая цена товара {new_price}.', reply_markup=kb.admin_product)
     else:
         await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
     await state.clear()
@@ -626,7 +629,7 @@ async def set_new_product_photo(message: Message, state: FSMContext):
         updated = await orm_update_product_photo(session, product_id, new_photo)
 
     if updated:
-        await message.answer(f'Имя категории обновлено на {new_photo}.', reply_markup=kb.admin_product)
+        await message.answer(f'Фотография продукта обновлена.', reply_markup=kb.admin_product)
     else:
         await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
     await state.clear()
@@ -733,3 +736,40 @@ async def admin_main_back(callback: CallbackQuery):
     await callback.message.answer('Выберите Действие для Товара', reply_markup=kb.admin_product)
 
 # endregion
+@admin_router.message(Command('getallorders'))
+async def send_all_orders(message: types.Message):
+    orders = await get_all_orders_with_details()
+
+    if not orders:
+        await message.reply("No orders found.")
+        return
+
+    # Create a DataFrame and populate it with the orders data
+    data = {
+        "TG ID": [],
+        "Phone": [],
+        "Total Price": [],
+        "Created At": []
+    }
+
+    for order in orders:
+        data["TG ID"].append(order.tg_id)
+        data["Phone"].append(order.phone_number)
+        data["Total Price"].append(order.total_price)
+        data["Created At"].append(order.created_at)
+
+    df = pd.DataFrame(data)
+
+    # Create a temporary file and save the DataFrame to an Excel file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        file_path = tmp.name
+        df.to_excel(file_path, index=False)
+
+    # Create FSInputFile instance
+    file_input = FSInputFile(file_path)
+
+    # Send the file
+    await message.reply_document(file_input)
+
+    # Remove the temporary file
+    os.remove(file_path)

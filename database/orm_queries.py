@@ -1,11 +1,8 @@
 from sqlalchemy import func, delete
+from sqlalchemy.future import select
+from database.engine import SessionMaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from sqlalchemy.future import select
-from sqlalchemy.orm import joinedload
-
-from database.engine import SessionMaker
 from database.models import Category, Product, User, Order, OrderItem
 
 
@@ -24,6 +21,7 @@ async def orm_update_user_language(tg_id: int, language_code: str):
             user.language = language_code
             # Commit the changes
             await session.commit()
+
 async def orm_get_user_language(tg_id: int) -> str:
     async with SessionMaker() as session:
         result = await session.execute(select(User.language).where(User.tg_id == tg_id))
@@ -32,15 +30,6 @@ async def orm_get_user_language(tg_id: int) -> str:
             return user_language
         else:
             return 'ru'
-
-
-# Usage example
-# session is your SQLAlchemy session object
-# tg_id is the Telegram ID of the user you want to find the language for
-
-# with Session(engine) as session:
-#     user_language = get_user_language(session, tg_id)
-#     print(f"The user's language is: {user_language}")
 
 
 async def orm_get_categories():
@@ -171,15 +160,24 @@ async def orm_count_products_by_category_id(category_id: int):
 
 # region ORM PRODUCT UPDATE QUERIES
 
-async def orm_update_product_name(session, product_id: int, new_name: str) -> bool:
-    async with session.begin():
+async def orm_update_product_name_ru(product_id: int, new_name_ru: str) -> bool:
+    async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
         if product:
-            product.p_name = new_name
+            product.name_ru = new_name_ru
             await session.commit()
             return True
     return False
 
+
+async def orm_update_product_name_uz(product_id: int, new_name_uz: str) -> bool:
+    async with SessionMaker() as session:
+        product = await session.scalar(select(Product).where(Product.id == product_id))
+        if product:
+            product.name_uz = new_name_uz
+            await session.commit()
+            return True
+    return False
 
 async def orm_update_product_price(session, product_id: int, new_price: float) -> bool:
     async with session.begin():
@@ -388,3 +386,31 @@ async def orm_update_user(user: User):
         print(f"Error updating user: {e}")
         await session.rollback()
         raise
+
+
+
+async def get_all_orders_with_details():
+    async with SessionMaker() as session:
+        try:
+            result = await session.execute(
+                select(
+                    User.tg_id,
+                    User.phone_number,
+                    Order.total_price,
+                    Order.created_at
+                ).join(Order, User.id == Order.user_id)
+            )
+            orders = result.fetchall()
+
+            if not orders:
+                print("No orders found.")
+            else:
+                for order in orders:
+                    print(f"TG ID: {order.tg_id}, Phone: {order.phone_number}, Total Price: {order.total_price}, Created At: {order.created_at}")
+
+            return orders
+
+        except Exception as e:
+            await session.rollback()
+            print(f"An error occurred: {e}")
+            return []
