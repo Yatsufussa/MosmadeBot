@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declared_attr, relationship
 from sqlalchemy.orm import DeclarativeBase
@@ -59,7 +59,6 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     total_price = Column(DECIMAL(10, 2))
-    created_at = Column(TIMESTAMP, server_default=func.now())
 
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order")
@@ -76,3 +75,17 @@ class OrderItem(Base):
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
+
+
+class ExcelOrder(Base):
+    __tablename__ = 'excel_orders'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, nullable=False)
+    category_name_ru = Column(String(255), nullable=False)
+    product_name_ru = Column(String(255), nullable=False)
+    product_quantity = Column(Integer, nullable=False)
+    total_cost = Column(Float, nullable=False)
+    customer_name = Column(String(255), nullable=False)
+    username = Column(String(255), nullable=False)
+    phone_number = Column(String(20), nullable=False)

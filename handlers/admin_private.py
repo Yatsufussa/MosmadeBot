@@ -1,12 +1,14 @@
+import logging
+
 import buttons.inline_buttons as kb
 import pandas as pd
 import tempfile
 from database.engine import *
-from aiogram import F, Router, types
+from aiogram import F, Router, types, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message, InputFile
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove, Message
 from aiogram.types.input_file import FSInputFile
 from ChatFilter.chat_type import ChatTypeFilter, IsAdmin
 
@@ -15,7 +17,7 @@ from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_update_product_price, orm_update_product_photo, orm_delete_product_by_id, \
     orm_update_category_sex, orm_update_category_name_ru, orm_update_category_name_uz, \
     orm_update_product_description_uz, orm_update_product_description_ru, orm_update_product_name_ru, \
-    orm_update_product_name_uz, get_all_orders_with_details
+    orm_update_product_name_uz, orm_get_all_user_ids, orm_get_all_excel_orders, orm_delete_all_excel_orders
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -71,7 +73,11 @@ class DeleteProduct(StatesGroup):
 # region ADMIN PANEL MAIN CATALOG PRODUCTS CATEGORIES
 @admin_router.message(Command("admin"))
 async def admin_features(message: types.Message):
-    await message.answer('Возможные команды: \n/admin(Start Menu), /stop(Stop the Process)',
+    await message.answer('Возможные команды: \n/admin(Start Menu),'
+                         '\n/stop(Stop the Process'
+                         '\n/newsletter text...(Для Рассылки)'
+                         '\n/getallorders - Excel document все заказы'
+                         ')\n\n\n\n / ExcelOrdersClear - Очистить данные с бд Excel(Осторожно удалит все записи рекомуендуется сначало скачать с /getallorders)',
                          reply_markup=kb.admin_main)
 
 
@@ -735,10 +741,35 @@ async def admin_main_back(callback: CallbackQuery):
     await callback.message.delete()
     await callback.message.answer('Выберите Действие для Товара', reply_markup=kb.admin_product)
 
+
+@admin_router.callback_query(F.data == 'newsletter')
+async def admin_main_back(callback: CallbackQuery):
+    await callback.message.delete()
+    await callback.message.answer('Напишите /newsletter в начале вашего сообщения для рассылки всем пользователям бота')
+
+
+@admin_router.message(Command("newsletter"))
+async def broadcast_message(message: Message, bot: Bot):
+    # Get all user IDs from the database
+    user_ids = await orm_get_all_user_ids()
+    # Get the text to broadcast from the message
+    text_to_broadcast = message.text[len('/broadcast '):]
+
+    # Send the message to all users
+    for user_id in user_ids:
+        try:
+            await bot.send_message(user_id, text_to_broadcast)
+            logging.info(f"Сообщение отправлено пользователю {user_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+    await message.reply("Сообщение успешно отправлено всем пользователям.")
+
+
 # endregion
 @admin_router.message(Command('getallorders'))
 async def send_all_orders(message: types.Message):
-    orders = await get_all_orders_with_details()
+    orders = await orm_get_all_excel_orders()
 
     if not orders:
         await message.reply("No orders found.")
@@ -746,17 +777,25 @@ async def send_all_orders(message: types.Message):
 
     # Create a DataFrame and populate it with the orders data
     data = {
-        "TG ID": [],
-        "Phone": [],
-        "Total Price": [],
-        "Created At": []
+        "Order ID": [],
+        "Category Name (RU)": [],
+        "Product Name (RU)": [],
+        "Product Quantity": [],
+        "Total Cost": [],
+        "Customer Name": [],
+        "Username": [],
+        "Phone Number": []
     }
 
     for order in orders:
-        data["TG ID"].append(order.tg_id)
-        data["Phone"].append(order.phone_number)
-        data["Total Price"].append(order.total_price)
-        data["Created At"].append(order.created_at)
+        data["Order ID"].append(order["order_id"])
+        data["Category Name (RU)"].append(order["category_name_ru"])
+        data["Product Name (RU)"].append(order["product_name_ru"])
+        data["Product Quantity"].append(order["product_quantity"])
+        data["Total Cost"].append(order["total_cost"])
+        data["Customer Name"].append(order["customer_name"])
+        data["Username"].append(order["username"])
+        data["Phone Number"].append(order["phone_number"])
 
     df = pd.DataFrame(data)
 
@@ -773,3 +812,12 @@ async def send_all_orders(message: types.Message):
 
     # Remove the temporary file
     os.remove(file_path)
+
+
+@admin_router.message(Command("ExcelOrdersClear"))
+async def broadcast_message(message: Message):
+    try:
+        await orm_delete_all_excel_orders()
+        await message.answer("Все записи с таблицы сведений удалены успешно!.")
+    except Exception as e:
+        await message.answer(f"Failed to clear orders: {str(e)}")

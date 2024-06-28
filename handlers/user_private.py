@@ -11,7 +11,7 @@ from language_dictionary.language import MESSAGES, GENDER_MAPPING
 
 from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create_order_item, \
     orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_update_user, \
-    orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name
+    orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name, orm_save_excel_order
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
@@ -432,6 +432,10 @@ async def show_basket(callback_or_message, state: FSMContext):
         tg_id = callback_or_message.from_user.id
         message = callback_or_message
 
+    # Check and delete the photo message if it exists
+    if message.content_type == 'photo':
+        await message.delete()
+
     data = await state.get_data()
     order_id = data.get('order_id')  # Replace with actual method to get the current order_id
 
@@ -468,7 +472,8 @@ async def show_basket(callback_or_message, state: FSMContext):
 
         text += (
             f"{messages['product_name']}: {product_name}\n\n"
-            f"{messages['product_price']}: {formatted_price} {messages['currency']}.\n{messages['product_quantity']}: {item.quantity}\n"
+            f"{messages['product_price']}: {formatted_price} {messages['currency']}.\n"
+            f"{messages['product_quantity']}: {item.quantity}\n"
             f"{messages['total_cost']}: {formatted_item_cost} {messages['currency']}\n\n"
         )
 
@@ -487,7 +492,6 @@ def register_handlers_user_private(bot: Bot):
         order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
         user = await orm_get_user_by_tg_id(callback.from_user.id)
         user_id = user.id
-        await callback.message.answer(callback.from_user.username)
         # Get all order items for this order
         order_items = await orm_get_order_items_by_order_id(order_id)
         if not order_items:
@@ -534,8 +538,19 @@ def register_handlers_user_private(bot: Bot):
         for item in order_items:
             product = await orm_get_product_by_id(item.product_id)
             category_name = await orm_get_category_name(product.category_id, 'ru')
-
             product_name = product.name_ru
+
+            # For Excel
+            await orm_save_excel_order(
+                order_id=new_order.id,
+                category_name_ru=category_name,
+                product_name_ru=product.name_ru,
+                product_quantity=item.quantity,
+                total_cost=item.total_cost,
+                customer_name=callback.from_user.first_name,
+                username=callback.from_user.username,
+                phone_number=user.phone_number
+            )
 
             group_text += (
                 f"{group_messages['category']}: {category_name}\n"
@@ -543,6 +558,7 @@ def register_handlers_user_private(bot: Bot):
                 f"{group_messages['quantity']}: {item.quantity}\n"
                 f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {messages['currency']}\n\n"
             )
+
         if user.language == 'uz':
             group_text += f"💰{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
             group_text += (f"🇺🇿{group_messages['customer_name']}: {callback.from_user.first_name},\n"

@@ -3,7 +3,7 @@ from sqlalchemy.future import select
 from database.engine import SessionMaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import Category, Product, User, Order, OrderItem
+from database.models import Category, Product, User, Order, OrderItem, ExcelOrder
 
 
 async def orm_update_user_language(tg_id: int, language_code: str):
@@ -359,6 +359,10 @@ async def orm_create_user_by_tg_id(tg_id: int) -> User:
         await session.refresh(new_user)
         return new_user
 
+async def orm_get_all_user_ids():
+    async with SessionMaker() as session:
+        result = await session.execute(select(User.tg_id))
+        return result.scalars().all()
 
 async def orm_get_user_id_by_tg_id(tg_id: int) -> int:
     async with SessionMaker() as session:
@@ -389,28 +393,45 @@ async def orm_update_user(user: User):
 
 
 
-async def get_all_orders_with_details():
+async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, total_cost, customer_name, username, phone_number):
     async with SessionMaker() as session:
-        try:
-            result = await session.execute(
-                select(
-                    User.tg_id,
-                    User.phone_number,
-                    Order.total_price,
-                    Order.created_at
-                ).join(Order, User.id == Order.user_id)
+        async with session.begin():
+            new_order = ExcelOrder(
+                order_id=order_id,
+                category_name_ru=category_name_ru,
+                product_name_ru=product_name_ru,
+                product_quantity=product_quantity,
+                total_cost=total_cost,
+                customer_name=customer_name,
+                username=username,
+                phone_number=phone_number
             )
-            orders = result.fetchall()
+            session.add(new_order)
+            await session.commit()
 
-            if not orders:
-                print("No orders found.")
-            else:
-                for order in orders:
-                    print(f"TG ID: {order.tg_id}, Phone: {order.phone_number}, Total Price: {order.total_price}, Created At: {order.created_at}")
+async def orm_get_all_excel_orders():
+    async with SessionMaker() as session:
+        async with session.begin():
+            result = await session.execute(select(ExcelOrder))
+            orders = result.scalars().all()
+            orders_list = [
+                {
+                    "order_id": order.order_id,
+                    "category_name_ru": order.category_name_ru,
+                    "product_name_ru": order.product_name_ru,
+                    "product_quantity": order.product_quantity,
+                    "total_cost": order.total_cost,
+                    "customer_name": order.customer_name,
+                    "username": order.username,
+                    "phone_number": order.phone_number
+                }
+                for order in orders
+            ]
+            return orders_list
 
-            return orders
 
-        except Exception as e:
-            await session.rollback()
-            print(f"An error occurred: {e}")
-            return []
+async def orm_delete_all_excel_orders():
+    async with SessionMaker() as session:
+        async with session.begin():
+            await session.execute(delete(ExcelOrder))
+            await session.commit()
