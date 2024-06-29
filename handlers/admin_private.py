@@ -784,7 +784,8 @@ async def send_all_orders(message: types.Message):
         "Total Cost": [],
         "Customer Name": [],
         "Username": [],
-        "Phone Number": []
+        "Phone Number": [],
+        "Orders Time": []
     }
 
     for order in orders:
@@ -796,6 +797,7 @@ async def send_all_orders(message: types.Message):
         data["Customer Name"].append(order["customer_name"])
         data["Username"].append(order["username"])
         data["Phone Number"].append(order["phone_number"])
+        data["Orders Time"].append(order["order_created_at"])
 
     df = pd.DataFrame(data)
 

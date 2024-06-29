@@ -34,7 +34,7 @@ MESSAGES_RU = {
     'phone': 'Номер Телефона',
     'order_sent': 'Ваш Заказ Отправлен!\nОжидайте обратной связи',
     'order_sent_confirmation': 'Ваш Заказ Отправлен!',
-    'add_to_basket': '🛒Добваить в Корзину',
+    'add_to_basket': '🛒Добавить в Корзину',
     'back': 'Назад',
     'basket_cleaned': '🗑Корзина Очищена',
     'basket_cleaned_confirmation': 'Корзина Пуста',

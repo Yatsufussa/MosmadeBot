@@ -423,7 +423,8 @@ async def orm_get_all_excel_orders():
                     "total_cost": order.total_cost,
                     "customer_name": order.customer_name,
                     "username": order.username,
-                    "phone_number": order.phone_number
+                    "phone_number": order.phone_number,
+                    "order_created_at": order.created_at
                 }
                 for order in orders
             ]

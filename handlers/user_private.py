@@ -15,7 +15,7 @@ from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
-GROUP_CHAT_IDS = [-4257083278]
+GROUP_CHAT_IDS = [-4255319290]
 
 
 class LanguageState(StatesGroup):
