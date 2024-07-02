@@ -5,6 +5,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
+    metatada = None
+
     @declared_attr
     def __tablename__(cls):
         return cls.__name__.lower()

@@ -90,8 +90,8 @@ async def orm_update_category_name_uz(category_id: int, new_name_uz: str):
         else:
             return False
 
-async def orm_update_category_sex(session: AsyncSession, category_id: int, new_sex: str):
-    async with session.begin():
+async def orm_update_category_sex(category_id: int, new_sex: str):
+    async with SessionMaker() as session:
         result = await session.execute(select(Category).where(Category.id == category_id))
         category = result.scalar_one_or_none()
         if category:
@@ -102,8 +102,8 @@ async def orm_update_category_sex(session: AsyncSession, category_id: int, new_s
             return False
 
 
-async def orm_delete_category(session: AsyncSession, category_id: int):
-    async with session.begin():
+async def orm_delete_category(category_id: int):
+    async with SessionMaker() as session:
         result = await session.execute(select(Category).where(Category.id == category_id))
         category = result.scalar_one_or_none()
         if category:
@@ -179,8 +179,8 @@ async def orm_update_product_name_uz(product_id: int, new_name_uz: str) -> bool:
             return True
     return False
 
-async def orm_update_product_price(session, product_id: int, new_price: float) -> bool:
-    async with session.begin():
+async def orm_update_product_price(product_id: int, new_price: float) -> bool:
+    async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
         if product:
             product.price = new_price
@@ -209,8 +209,8 @@ async def orm_update_product_description_uz(product_id: int, new_description_uz:
 
 
 
-async def orm_update_product_photo(session, product_id: int, new_photo: str) -> bool:
-    async with session.begin():
+async def orm_update_product_photo(product_id: int, new_photo: str) -> bool:
+    async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
         if product:
             product.image_url = new_photo
@@ -220,8 +220,8 @@ async def orm_update_product_photo(session, product_id: int, new_photo: str) -> 
 
 
 # endregion
-async def orm_delete_product_by_id(session: AsyncSession, product_id: int):
-    async with session.begin():
+async def orm_delete_product_by_id(product_id: int):
+    async with SessionMaker() as session:
         product = await session.get(Product, product_id)
         if product:
             await session.delete(product)  # Correctly awaiting the delete operation

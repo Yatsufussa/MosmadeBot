@@ -43,15 +43,14 @@ class Form(StatesGroup):
 
 @user_private.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    tg_id = message.from_user.id
-    user = await orm_get_user_by_tg_id(tg_id)
+    user = await orm_get_user_by_tg_id(message.from_user.id)
 
     if user:
         language_code = user.language  # Assuming the user object has a language attribute
         await state.update_data(language=language_code)
         await to_main(message, state, first_time=True)
     else:
-        await orm_set_user(tg_id)  # Assuming orm.set_user() registers the user
+        await orm_set_user(message.from_user.id)  # Assuming orm.set_user() registers the user
         await state.set_state(LanguageState.language)
         await state.update_data(language='ru')  # Default language
         await message.answer(
@@ -62,15 +61,14 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @user_private.message(or_f(Command("start"), (F.text.lower() == "start")))
 async def menu_cmd(message: types.Message, state: FSMContext):
-    tg_id = message.from_user.id
-    user = await orm_get_user_by_tg_id(tg_id)
+    user = await orm_get_user_by_tg_id(message.from_user.id)
 
     if user:
         language_code = user.language  # Assuming the user object has a language attribute
         await state.update_data(language=language_code)
         await to_main(message, state, first_time=True)
     else:
-        await orm_set_user(tg_id)  # Assuming orm.set_user() registers the user
+        await orm_set_user(message.from_user.id)  # Assuming orm.set_user() registers the user
         await state.set_state(LanguageState.language)
         await state.update_data(language='ru')  # Default language
         await message.answer(
@@ -238,7 +236,10 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
             product_name = product.name_ru
             product_description = product.description_ru
 
-        await state.update_data(product_id=product_id, product_name=product_name, quantity=1)
+        await state.update_data(product_id=product_id,
+                                product_name=product_name,
+                                quantity=1)
+
         price_formatted = locale.format_string('%d', product.price, grouping=True)  # Format price without decimals
         text = (
             f"{messages['product_name']}: {product_name}\n"
@@ -252,14 +253,18 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
             keyboard = kb.create_product_buttons(quantity, language_code=language_code)
             await state.update_data(message_type='photo')  # Update state with message type
             await callback.message.delete()
-            await callback.message.answer_photo(photo=product.image_url, caption=text, reply_markup=keyboard)
+            await callback.message.answer_photo(photo=product.image_url,
+                                                caption=text,
+                                                reply_markup=keyboard)
         else:
             await state.update_data(message_type='text')  # Update state with message type
             await callback.message.edit_text(text, reply_markup=None)
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+            reply_markup=await kb.user_categories(back_callback='to_main',
+                                                  page=1,
+                                                  categories_per_page=4,
                                                   language=language_code)
         )
 
@@ -298,13 +303,16 @@ async def update_product_text(callback: CallbackQuery, state: FSMContext):
 
         if product.image_url:
             keyboard = kb.create_product_buttons(quantity, language_code)
-            await callback.message.edit_caption(caption=text, reply_markup=keyboard)
+            await callback.message.edit_caption(caption=text,
+                                                reply_markup=keyboard)
         else:
             await callback.message.edit_text(text, reply_markup=None)
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+            reply_markup=await kb.user_categories(back_callback='to_main',
+                                                  page=1,
+                                                  categories_per_page=4,
                                                   language=language_code)
         )
 
@@ -315,7 +323,6 @@ async def handle_plus_one(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     quantity = data.get('quantity', 1)  # Default quantity is 1 if not set
     language_code = await orm_get_user_language(callback.from_user.id)
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
     if quantity < 20:
         quantity += 1
@@ -370,6 +377,7 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
             added_to_cart_message = (
                 f"Добавлено в корзину: {product_name} (Количество: {quantity}, Общая стоимость: {total_cost} Сум)"
             )
+
         await callback.answer(added_to_cart_message)
 
     except SQLAlchemyError as e:
@@ -380,7 +388,7 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
 @user_private.callback_query(F.data == 'basket')
 async def basket_handler(callback: CallbackQuery, state: FSMContext):
     tg_id = callback.from_user.id
-    user = await orm_get_user_by_tg_id(tg_id)
+    user = await orm_get_user_by_tg_id(callback.from_user.id)
 
     # Get the user's preferred language
     language_code = await orm_get_user_language(tg_id)
@@ -432,20 +440,17 @@ async def show_basket(callback_or_message, state: FSMContext):
         tg_id = callback_or_message.from_user.id
         message = callback_or_message
 
-    # Check and delete the photo message if it exists
-    if message.content_type == 'photo':
-        await message.delete()
-
     data = await state.get_data()
     order_id = data.get('order_id')  # Replace with actual method to get the current order_id
 
     order_items = await orm_get_order_items_by_order_id(order_id)
     if not order_items:
         # Fetch user language
+        await message.delete()
         language_code = await orm_get_user_language(tg_id)
         messages = MESSAGES.get(language_code, MESSAGES['ru'])
-
         await message.answer(messages['basket_empty'], reply_markup=ReplyKeyboardRemove())
+        await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
         return
 
     # Fetch user language
@@ -481,7 +486,7 @@ async def show_basket(callback_or_message, state: FSMContext):
     formatted_total_cost = locale.format_string('%d', total_cost, grouping=True)
 
     text += f"{messages['total_order_cost']}: {formatted_total_cost} {messages['currency']}"
-
+    await message.delete()
     await message.answer(text, reply_markup=kb.create_basket_buttons(language_code))
 
 
@@ -491,9 +496,8 @@ def register_handlers_user_private(bot: Bot):
         data = await state.get_data()
         order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
         user = await orm_get_user_by_tg_id(callback.from_user.id)
-        user_id = user.id
-        # Get all order items for this order
-        order_items = await orm_get_order_items_by_order_id(order_id)
+        order_items = await orm_get_order_items_by_order_id(order_id)  # Get all order items for this order
+
         if not order_items:
             await callback.answer(MESSAGES['ru']['basket_empty'])  # Adjust based on your message dictionary
             return
@@ -501,7 +505,7 @@ def register_handlers_user_private(bot: Bot):
         total_cost = sum(item.total_cost for item in order_items)
 
         # Create the order
-        new_order = await orm_create_order(user_id, total_cost)
+        new_order = await orm_create_order(user.id, total_cost)
 
         # Constructing the order details text for the user
         language_code = await orm_get_user_language(callback.from_user.id)
@@ -578,6 +582,8 @@ def register_handlers_user_private(bot: Bot):
         await orm_clean_order_items_by_order_id(order_id)  # Implement this ORM function to clean the basket
         await callback.answer(messages['order_sent'])
         await callback.message.edit_text(messages['order_sent_confirmation'])
+        await callback.message.delete()
+        await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'clean_basket')
@@ -640,12 +646,16 @@ async def to_category(callback: CallbackQuery, state: FSMContext):
         await callback.message.delete()
         await callback.message.answer(
             text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+            reply_markup=await kb.user_categories(back_callback='to_main',
+                                                  page=1,
+                                                  categories_per_page=4,
                                                   language=language_code)
         )
     else:
         await callback.message.edit_text(
             text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
+            reply_markup=await kb.user_categories(back_callback='to_main',
+                                                  page=1,
+                                                  categories_per_page=4,
                                                   language=language_code)
         )

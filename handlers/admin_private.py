@@ -154,7 +154,7 @@ async def admin_add_category_sex(message: Message, state=FSMContext):
         return
 
     # Normalize sex input
-    sex = 'Женский' if sex == 'Женский' else 'мужской'
+    sex = 'мужской' if sex == 'мужской' else 'женский'
 
     data = await state.get_data()
     category_data = {'name_ru': data['name_ru'], 'name_uz': data['name_uz'], 'sex': sex}
@@ -197,7 +197,7 @@ async def select_category(callback: CallbackQuery, state: FSMContext):
         await state.update_data(category_id=category_id)
         await callback.answer('')
         await callback.message.edit_text(
-            text=f'Вы выбрали категорию {category.name}({category.sex}) с ID {category_id}.\nЧто изменить?',
+            text=f'Вы выбрали категорию {category.name_ru}({category.sex}) с ID {category_id}.\nЧто изменить?',
             reply_markup=kb.admin_category_change
         )
     else:
@@ -212,11 +212,9 @@ async def start_change_category_name(callback: CallbackQuery, state: FSMContext)
     await callback.message.answer('Введите новое имя категории(Ru)', reply_markup=ReplyKeyboardRemove())
 
 
-# Handler to process the new category name
 @admin_router.message(ChangeCategory.ch_name_ru)
 async def set_new_category_name_ru(message: Message, state: FSMContext):
     new_name_ru = message.text.strip()
-
     # Validate new category name length
     if not (2 <= len(new_name_ru) <= 30):
         await message.answer(
@@ -226,20 +224,23 @@ async def set_new_category_name_ru(message: Message, state: FSMContext):
     data = await state.get_data()
     category_id = data.get('category_id')
 
+    if not category_id:
+        await message.answer('Не удалось получить ID категории. Пожалуйста, попробуйте снова.',
+                             reply_markup=kb.admin_category)
+        await state.clear()
+        return
+
     updated = await orm_update_category_name_ru(category_id, new_name_ru)
 
     if updated:
-        await message.answer(f'Имя категории обновлено на {new_name_ru}.', reply_markup=kb.admin_category)
-        # Transition to change category name in Uzbek
+        await message.answer(f'Имя категории обновлено на {new_name_ru}.', reply_markup=ReplyKeyboardRemove())
         await state.set_state(ChangeCategory.ch_name_uz)
         await message.answer('Kategoriya nomini yangilang (Uz)', reply_markup=ReplyKeyboardRemove())
     else:
         await message.answer(f'Категория с ID {category_id} не найдена.', reply_markup=kb.admin_category)
+        await state.clear()
 
-    await state.clear()
 
-
-# Handler to process the new category name in Uzbek
 @admin_router.message(ChangeCategory.ch_name_uz)
 async def set_new_category_name_uz(message: Message, state: FSMContext):
     new_name_uz = message.text.strip()
@@ -253,13 +254,18 @@ async def set_new_category_name_uz(message: Message, state: FSMContext):
     data = await state.get_data()
     category_id = data.get('category_id')
 
+    if not category_id:
+        await message.answer('Не удалось получить ID категории. Пожалуйста, попробуйте снова.',
+                             reply_markup=kb.admin_category)
+        await state.clear()
+        return
+
     updated = await orm_update_category_name_uz(category_id, new_name_uz)
 
     if updated:
         await message.answer(f'Kategoriya nomi {new_name_uz} ga o`zgartirildi.', reply_markup=kb.admin_category)
     else:
         await message.answer(f'ID {category_id} bo`yicha kategoriya topilmadi.', reply_markup=kb.admin_category)
-
     await state.clear()
 
 
@@ -286,8 +292,7 @@ async def change_category_sex(message: Message, state: FSMContext):
     data = await state.get_data()
     category_id = data.get('category_id')
 
-    async with SessionMaker() as session:
-        updated = await orm_update_category_sex(session, category_id, new_sex)
+    updated = await orm_update_category_sex(category_id, new_sex)
 
     if updated:
         await message.answer(f'Пол категории обновлен на {new_sex}.', reply_markup=kb.admin_category)
@@ -335,8 +340,8 @@ async def confirm_category_deletion(message: Message, state: FSMContext):
 
     if confirmation == 'y':
         # Use async session to delete the category
-        async with SessionMaker() as session:
-            deleted = await orm_delete_category(session, category_id)
+
+        deleted = await orm_delete_category(category_id)
 
         if deleted:
             await message.answer(f'Категория с ID {category_id} была удалена.\nВы в разделе категории',
@@ -492,7 +497,7 @@ async def category_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(data[2])
     await state.update_data(category_id=category_id)
     await callback.answer('')
-    await callback.message.edit_text('Выберите товар', reply_markup=await kb.items(category_id, page))
+    await callback.message.edit_text('Выберите товар', reply_markup= await kb.products_by_category(category_id,page=page, items_per_row=3))
 
 
 @admin_router.callback_query(F.data.startswith('product_'))
@@ -608,8 +613,7 @@ async def set_new_product_price(message: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data.get('product_id')
 
-    async with SessionMaker() as session:
-        updated = await orm_update_product_price(session, product_id, new_price)
+    updated = await orm_update_product_price(product_id, new_price)
 
     if updated:
         await message.answer(f'Новая цена товара {new_price}.', reply_markup=kb.admin_product)
@@ -630,9 +634,7 @@ async def set_new_product_photo(message: Message, state: FSMContext):
     new_photo = message.photo[-1].file_id
     data = await state.get_data()
     product_id = data.get('product_id')
-
-    async with SessionMaker() as session:
-        updated = await orm_update_product_photo(session, product_id, new_photo)
+    updated = await orm_update_product_photo(product_id, new_photo)
 
     if updated:
         await message.answer(f'Фотография продукта обновлена.', reply_markup=kb.admin_product)
@@ -718,8 +720,8 @@ async def confirm_product_deletion(message: Message, state: FSMContext):
     product_name = data.get('product_name')
 
     if confirmation == 'y':
-        async with SessionMaker() as session:
-            deleted = await orm_delete_product_by_id(session, product_id)
+
+        deleted = await orm_delete_product_by_id(product_id)
 
         if deleted:
             await message.answer(f'Продукт "{product_name}" успешно удален.', reply_markup=kb.admin_product)

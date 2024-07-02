@@ -4,7 +4,7 @@ from language_dictionary.language import MESSAGES
 from database.orm_queries import orm_get_products_by_category_id, orm_count_products_by_category_id, \
      orm_count_categories,  orm_u_get_categories
 
-ITEMS_PER_PAGE = 4
+
 all_categories = None
 
 
@@ -111,29 +111,29 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [
-                    InlineKeyboardButton(text="🚀Каталог", callback_data='catalog'),
-                InlineKeyboardButton(text="☎️Контакты", callback_data='contacts')
+                    InlineKeyboardButton(text="🚀 Каталог", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️ Контакты", callback_data='contacts')
             ],
             [
-                InlineKeyboardButton(text="🛒Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="🪡Наши Ткани", callback_data='textile')
+                InlineKeyboardButton(text="🛒 Корзина", callback_data='basket'),
+                InlineKeyboardButton(text="🪡 Наши Ткани", callback_data='textile')
             ],
             [
-                InlineKeyboardButton(text="⚙️Язык", callback_data='language')
+                InlineKeyboardButton(text="⚙️ Язык", callback_data='language')
             ]
         ]
     elif language_code == 'uz':
         buttons = [
             [
-                InlineKeyboardButton(text="🚀Katalog", callback_data='catalog'),
-                InlineKeyboardButton(text="☎️Aloqalar", callback_data='contacts')
+                InlineKeyboardButton(text="🚀 Katalog", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️ Aloqalar", callback_data='contacts')
             ],
             [
-                InlineKeyboardButton(text="🛒Savat", callback_data='basket'),
-                InlineKeyboardButton(text="🪡Matolarimiz", callback_data='textile')
+                InlineKeyboardButton(text="🛒 Savat", callback_data='basket'),
+                InlineKeyboardButton(text="🪡 Matolarimiz", callback_data='textile')
             ],
             [
-                InlineKeyboardButton(text="⚙️Til", callback_data='language')
+                InlineKeyboardButton(text="⚙️ Til", callback_data='language')
             ]
         ]
     else:
@@ -159,6 +159,8 @@ def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
         buttons = []
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+ITEMS_PER_PAGE = 6
 
 
 # Generate Products
@@ -228,17 +230,17 @@ async def generate_product_keyboard(category_id: int, page: int, items_per_page:
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
-async def products_by_category(category_id: int, page: int, items_per_row: int = 2):
+async def products_by_category(category_id: int, page: int, items_per_row: int = 3):
     return await generate_product_keyboard(category_id, page, ITEMS_PER_PAGE, 'product', 'products', items_per_row,
                                            back_callback='change_product')
 
 
-async def products_to_delete(category_id: int, page: int, items_per_row: int = 2):
+async def products_to_delete(category_id: int, page: int, items_per_row: int = 3):
     return await generate_product_keyboard(category_id, page, ITEMS_PER_PAGE, 'dproduct', 'dproducts', items_per_row,
                                            back_callback='delete_product')
 
 
-async def items(category_id: int, page: int, items_per_row: int = 2, language: str = '', back_callback: str = ''):
+async def items(category_id: int, page: int, items_per_row: int = 3, language: str = '', back_callback: str = ''):
     return await generate_product_keyboard(category_id, page, ITEMS_PER_PAGE, 'item', 'itemscategory', items_per_row,
                                            back_callback, language)
 
