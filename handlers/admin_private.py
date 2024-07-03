@@ -18,6 +18,7 @@ from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_update_category_sex, orm_update_category_name_ru, orm_update_category_name_uz, \
     orm_update_product_description_uz, orm_update_product_description_ru, orm_update_product_name_ru, \
     orm_update_product_name_uz, orm_get_all_user_ids, orm_get_all_excel_orders, orm_delete_all_excel_orders
+from language_dictionary.language import GENDER_MAPPING, MESSAGES
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -174,22 +175,56 @@ async def admin_add_category_sex(message: Message, state=FSMContext):
 @admin_router.callback_query(F.data == 'change_category')
 async def category_operation_type(callback: CallbackQuery):
     await callback.answer('')
-    await callback.message.edit_text(text='Выберите категорию.',
-                                     reply_markup=await kb.categories(back_callback='to_admin_main', page=1,
-                                                                      categories_per_page=4))
+    await callback.message.edit_text(text='Выберите пол категории.',
+                                     reply_markup=kb.admin_category_gender_selection_keyboard())
 
 
-@admin_router.callback_query(F.data.startswith('admincategories_'))
-async def admin_categories_pagination(callback: CallbackQuery):
+@admin_router.callback_query(F.data.startswith('admingender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')
+
+    # Get the user's preferred language
+    language_code = 'ru'
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['category_menu'],
+            reply_markup=await kb.categories(back_callback='to_admin_category', page=1, categories_per_page=4,
+                                             language=language_code, sex=sex)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['category_menu'],
+            reply_markup=await kb.categories(back_callback='to_admin_category', page=1, categories_per_page=4,
+                                             language=language_code, sex=sex),
+        )
+
+
+@admin_router.callback_query(F.data.startswith('AdminCategories_'))
+async def admin_categories_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split('_')[1])
+    language_code = 'ru'
+    data = await state.get_data()
+    sex = data.get('sex', None)
     await callback.answer('')
     await callback.message.edit_text('Выберите категорию.',
-                                     reply_markup=await kb.categories(back_callback='to_admin_main', page=page,
-                                                                      categories_per_page=4))
+                                     reply_markup=await kb.categories(back_callback='to_admin_category', page=page,
+                                                                      categories_per_page=4,
+                                                                      language=language_code, sex=sex),
+                                     )
 
 
 # Handler when a category is selected
-@admin_router.callback_query(F.data.startswith('admincategory_'))
+@admin_router.callback_query(F.data.startswith('AdminCategory_'))
 async def select_category(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[-1])
     category = await orm_get_category_by_id(category_id)
@@ -308,17 +343,50 @@ async def change_category_sex(message: Message, state: FSMContext):
 async def category_operation_type(callback: CallbackQuery):
     await callback.answer('')
     await callback.message.edit_text('Выберите категорию.',
-                                     reply_markup=await kb.select_categories(back_callback='to_admin_main', page=1,
-                                                                             categories_per_page=4))
+                                     reply_markup=kb.admin_category_delete_gender_selection_keyboard())
+
+
+@admin_router.callback_query(F.data.startswith('admindelgender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')
+
+    # Get the user's preferred language
+    language_code = 'ru'
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['category_menu'],
+            reply_markup=await kb.select_categories(back_callback='to_admin_main', page=1, categories_per_page=4,
+                                                    language=language_code, sex=sex)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['category_menu'],
+            reply_markup=await kb.select_categories(back_callback='to_admin_main', page=1, categories_per_page=4,
+                                                    language=language_code, sex=sex),
+        )
 
 
 @admin_router.callback_query(F.data.startswith('selectcategories_'))
-async def admin_categories_pagination(callback: CallbackQuery):
+async def admin_categories_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split('_')[1])
+    language_code = 'ru'
+    data = await state.get_data()
+    sex = data.get('sex', None)
     await callback.answer('')
     await callback.message.edit_text('Выберите категорию.',
                                      reply_markup=await kb.select_categories(back_callback='to_admin_main', page=page,
-                                                                             categories_per_page=4))
+                                                                             categories_per_page=4,
+                                                                             language=language_code, sex=sex))
 
 
 @admin_router.callback_query(F.data.startswith('selectcategory_'))
@@ -382,14 +450,63 @@ async def admin_add_product(callback: CallbackQuery, state: FSMContext):
         # Delete photo message
         await callback.message.delete()
         await state.set_state(AddProduct.add_category)
-        await callback.message.answer('Выберите Категорию Товара', reply_markup=await kb.admin_add_product_categories())
+        await callback.message.answer('Выберите Категорию Товара',
+                                      reply_markup=kb.admin_category_add_product_selection_keyboard())
     else:
         await state.set_state(AddProduct.add_category)
         await callback.message.edit_text('Выберите Категорию Товара',
-                                         reply_markup=await kb.admin_add_product_categories())
+                                         reply_markup=kb.admin_category_add_product_selection_keyboard())
 
 
-@admin_router.callback_query(F.data.startswith('pcategory_'))
+@admin_router.callback_query(F.data.startswith('adminaddpgender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')
+
+    # Get the user's preferred language
+    language_code = 'ru'
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['category_menu'],
+            reply_markup=await kb.admin_add_product_categories(back_callback='to_admin_product', page=1,
+                                                               categories_per_page=4,
+                                                               language=language_code, sex=sex)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['category_menu'],
+            reply_markup=await kb.admin_add_product_categories(back_callback='to_admin_product', page=1,
+                                                               categories_per_page=4,
+                                                               language=language_code, sex=sex),
+        )
+
+
+@admin_router.callback_query(F.data.startswith('paddcategories_'))
+async def admin_categories_pagination(callback: CallbackQuery, state: FSMContext):
+    page = int(callback.data.split('_')[1])
+    language_code = 'ru'
+    data = await state.get_data()
+    sex = data.get('sex', None)
+    await callback.answer('')
+    await callback.message.edit_text('Выберите категорию.',
+                                     reply_markup=await kb.admin_add_product_categories(back_callback='to_admin_product',
+                                                                                        page=page,
+                                                                                        categories_per_page=4,
+                                                                                        language=language_code,
+                                                                                        sex=sex),
+                                     )
+
+
+@admin_router.callback_query(F.data.startswith('paddcategory_'))
 async def select_category_for_product(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[-1])
     await state.update_data(category_id=category_id)
@@ -464,17 +581,50 @@ async def admin_add_product_photo(message: Message, state: FSMContext):
 async def admin_main_back(callback: CallbackQuery):
     await callback.answer('Вы в пункте Продукты')
     await callback.message.edit_text('Выберите из Какой Категории Продукт',
-                                     reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_main', page=1,
-                                                                                categories_per_page=4))
+                                     reply_markup=kb.admin_category_change_product_gender_selection_keyboard())
+
+
+@admin_router.callback_query(F.data.startswith('adminchpgender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')
+
+    # Get the user's preferred language
+    language_code = 'ru'
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['category_menu'],
+            reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_product', page=1, categories_per_page=4,
+                                                       language=language_code, sex=sex)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['category_menu'],
+            reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_main', page=1, categories_per_page=4,
+                                                       language=language_code, sex=sex),
+        )
 
 
 @admin_router.callback_query(F.data.startswith('pchcategories_'))
-async def categories_pagination(callback: CallbackQuery):
+async def categories_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split('_')[1])
+    language_code = 'ru'
+    data = await state.get_data()
+    sex = data.get('sex', None)
     await callback.answer('')
     await callback.message.edit_text('Выберите из Какой Категории Продукт',
-                                     reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_main',
-                                                                                page=page, categories_per_page=4))
+                                     reply_markup=await kb.pchcategory_keyboard(back_callback='to_admin_product', page=page,
+                                                                                categories_per_page=4,
+                                                                                language=language_code, sex=sex))
 
 
 @admin_router.callback_query(F.data.startswith('pchcategory_'))
@@ -497,7 +647,9 @@ async def category_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(data[2])
     await state.update_data(category_id=category_id)
     await callback.answer('')
-    await callback.message.edit_text('Выберите товар', reply_markup= await kb.products_by_category(category_id,page=page, items_per_row=3))
+    await callback.message.edit_text('Выберите товар',
+                                     reply_markup=await kb.products_by_category(category_id, page=page,
+                                                                                items_per_row=3))
 
 
 @admin_router.callback_query(F.data.startswith('product_'))
@@ -650,21 +802,55 @@ async def set_new_product_photo(message: Message, state: FSMContext):
 @admin_router.callback_query(F.data == 'delete_product')
 async def admin_main_back(callback: CallbackQuery):
     await callback.answer('Удаление')
-    await callback.message.edit_text('Выберите из Какой Категории Продукт для удаления',
-                                     reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_main', page=1,
-                                                                               categories_per_page=4))
+    await callback.message.edit_text(text='Выберите пол категории.',
+                                     reply_markup=kb.admin_category_delete_product_gender_selection_keyboard())
+
+
+@admin_router.callback_query(F.data.startswith('admindelpgender_'))
+async def category_gender_selection(callback: CallbackQuery, state: FSMContext):
+    gender = callback.data.split('_')[1]
+    sex = GENDER_MAPPING.get(gender, gender)  # Convert gender term to Russian
+
+    await state.update_data(sex=sex)
+
+    data = await state.get_data()
+    message_type = data.get('message_type', 'text')
+
+    # Get the user's preferred language
+    language_code = 'ru'
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    if message_type == 'photo':
+        # Delete photo message
+        await callback.message.delete()
+        await callback.message.answer(
+            text=messages['category_menu'],
+            reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_product', page=1, categories_per_page=4,
+                                                      language=language_code, sex=sex)
+        )
+    else:
+        await callback.message.edit_text(
+            text=messages['category_menu'],
+            reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_product', page=1, categories_per_page=4,
+                                                      language=language_code, sex=sex),
+        )
 
 
 @admin_router.callback_query(F.data.startswith('pdcategories_'))
-async def categories_pagination(callback: CallbackQuery):
+async def categories_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split('_')[1])
+    data = await state.get_data()
+    sex = data.get('sex', None)
+    language_code = 'ru'
     await callback.answer('')
     await callback.message.edit_text('Выберите категорию.',
-                                     reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_main', page=page,
+                                     reply_markup=await kb.pdcategory_keyboard(back_callback='to_admin_product', page=page,
+                                                                               language=language_code,
+                                                                               sex=sex,
                                                                                categories_per_page=4))
 
 
-@admin_router.callback_query(F.data.startswith('pdcategory_'))
+@admin_router.callback_query(F.data.startswith('pdcategorie_'))
 async def admin_select_category_for_product(callback: CallbackQuery, state: FSMContext):
     data = callback.data.split('_')
     category_id = int(data[1])

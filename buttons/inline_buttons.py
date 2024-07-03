@@ -2,8 +2,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from language_dictionary.language import MESSAGES
 from database.orm_queries import orm_get_products_by_category_id, orm_count_products_by_category_id, \
-     orm_count_categories,  orm_u_get_categories
-
+    orm_count_categories, orm_u_get_categories
 
 all_categories = None
 
@@ -70,9 +69,9 @@ admin_product_delete = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Удалить', callback_data='delete_product')],
     [InlineKeyboardButton(text='Назад', callback_data='to_admin_product')],
 ])
+
+
 # endregion
-
-
 
 
 def language_selection_keyboard() -> InlineKeyboardMarkup:
@@ -89,17 +88,18 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
 
     return markup
 
+
 def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='gender_male'),
-            InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='gender_female')],
+             InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='gender_female')],
             [InlineKeyboardButton(text="Назад", callback_data='to_main')],
         ]
     elif language_code == 'uz':
         buttons = [
             [InlineKeyboardButton(text="🧑🏻‍🦰 Erkaklar", callback_data='gender_male'),
-            InlineKeyboardButton(text="👩🏻‍🦰 Ayollar", callback_data='gender_female')],
+             InlineKeyboardButton(text="👩🏻‍🦰 Ayollar", callback_data='gender_female')],
             [InlineKeyboardButton(text="Orqaga", callback_data='to_main')],
         ]
     else:
@@ -107,11 +107,57 @@ def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMark
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+def admin_category_add_product_selection_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='adminaddpgender_male'),
+         InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='adminaddpgender_female')],
+        [InlineKeyboardButton(text="Назад", callback_data='to_admin_product')],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_category_gender_selection_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='admingender_male'),
+         InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='admingender_female')],
+        [InlineKeyboardButton(text="Назад", callback_data='to_admin_category')],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_category_delete_product_gender_selection_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='admindelpgender_male'),
+         InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='admindelpgender_female')],
+        [InlineKeyboardButton(text="Назад", callback_data='to_admin_product')],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_category_change_product_gender_selection_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='adminchpgender_male'),
+         InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='adminchpgender_female')],
+        [InlineKeyboardButton(text="Назад", callback_data='to_admin_product')],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_category_delete_gender_selection_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='admindelgender_male'),
+         InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='admindelgender_female')],
+        [InlineKeyboardButton(text="Назад", callback_data='to_admin_category')],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [
-                    InlineKeyboardButton(text="🚀 Каталог", callback_data='catalog'),
+                InlineKeyboardButton(text="🚀 Каталог", callback_data='catalog'),
                 InlineKeyboardButton(text="☎️ Контакты", callback_data='contacts')
             ],
             [
@@ -159,6 +205,7 @@ def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
         buttons = []
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 ITEMS_PER_PAGE = 6
 
@@ -266,7 +313,8 @@ def create_product_buttons(quantity: int, language_code: str = 'ru') -> InlineKe
 
 
 async def generate_category_keyboard(page: int, categories_per_page: int, callback_prefix: str,
-                                     navigation_callback: str, back_callback: str, language: str = 'ru', sex: str = None):
+                                     navigation_callback: str, back_callback: str, language: str = 'ru',
+                                     sex: str = None):
     offset = (page - 1) * categories_per_page
     all_categories = await orm_u_get_categories(offset, categories_per_page, sex)
     total_categories = await orm_count_categories(sex)
@@ -294,10 +342,12 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
     pagination_buttons = [None, None, None]
 
     if page > 1:
-        pagination_buttons[0] = InlineKeyboardButton(text='⬅️', callback_data=f'{navigation_callback}_{page - 1}_{language}')
+        pagination_buttons[0] = InlineKeyboardButton(text='⬅️',
+                                                     callback_data=f'{navigation_callback}_{page - 1}_{language}')
 
     if page < total_pages:
-        pagination_buttons[2] = InlineKeyboardButton(text='➡️', callback_data=f'{navigation_callback}_{page + 1}_{language}')
+        pagination_buttons[2] = InlineKeyboardButton(text='➡️',
+                                                     callback_data=f'{navigation_callback}_{page + 1}_{language}')
 
     if language == 'ru':
         back_to_main_menu_text = '⬇️'
@@ -315,30 +365,40 @@ async def generate_category_keyboard(page: int, categories_per_page: int, callba
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
-async def admin_add_product_categories(page: int = 1, categories_per_page: int = 5):
-    return await generate_category_keyboard(page, categories_per_page, 'pcategory', 'pcategories',
-                                            back_callback='to_admin_product')
+async def admin_add_product_categories(page: int, categories_per_page: int = 5, back_callback: str = '',
+                                       language: str = '',
+                                       sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'paddcategory', 'paddcategories', back_callback,
+                                            language, sex)
 
 
-async def pchcategory_keyboard(page: int = 1, categories_per_page: int = 5,back_callback: str = ''):
-    return await generate_category_keyboard(page, categories_per_page, 'pchcategory', 'pchcategories',
-                                            back_callback)
+async def pchcategory_keyboard(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '',
+                               sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'pchcategory', 'pchcategories', back_callback,
+                                            language, sex)
 
 
-async def pdcategory_keyboard(page: int, categories_per_page: int = 5,back_callback: str = ''):
-    return await generate_category_keyboard(page, categories_per_page, 'pdcategory', 'pdcategories',
-                                            back_callback)
+async def pdcategory_keyboard(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '',
+                              sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'pdcategorie', 'pdcategories', back_callback,
+                                            language, sex)
 
 
-async def categories(page: int, categories_per_page: int = 5, back_callback: str = ''):
-    return await generate_category_keyboard(page, categories_per_page, 'admincategory', 'admincategories',
-                                            back_callback)
+async def categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '',
+                     sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'AdminCategory', 'AdminCategories',
+                                            back_callback,
+                                            language, sex)
 
 
-async def select_categories(page: int, categories_per_page: int = 5,back_callback: str = ''):
+async def select_categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '',
+                            sex: str = None):
     return await generate_category_keyboard(page, categories_per_page, 'selectcategory', 'selectcategories',
-                                            back_callback)
+                                            back_callback,
+                                            language, sex)
 
 
-async def user_categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '', sex: str = None):
-    return await generate_category_keyboard(page, categories_per_page, 'UserCategory', 'usercategories', back_callback, language, sex)
+async def user_categories(page: int, categories_per_page: int = 5, back_callback: str = '', language: str = '',
+                          sex: str = None):
+    return await generate_category_keyboard(page, categories_per_page, 'UserCategory', 'usercategories', back_callback,
+                                            language, sex)
