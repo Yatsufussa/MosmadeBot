@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey, Float, BigInteger
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declared_attr, relationship
 from sqlalchemy.orm import DeclarativeBase
@@ -20,7 +20,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    tg_id = Column(Integer, unique=True, nullable=False)
+    tg_id = Column(BigInteger, unique=True, nullable=False)
     phone_number = Column(String(15), nullable=True)
     language = Column(String(2), nullable=False, default='ru')  # Storing user's preferred language
 

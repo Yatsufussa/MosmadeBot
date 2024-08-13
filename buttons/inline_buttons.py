@@ -162,7 +162,7 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🛒 Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="🪡 Наши Ткани", callback_data='textile')
+                InlineKeyboardButton(text="Интерактивное меню", url='https://mosmade.ru/')
             ],
             [
                 InlineKeyboardButton(text="⚙️ Язык", callback_data='language')

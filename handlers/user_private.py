@@ -1,4 +1,7 @@
 import locale
+
+from aiogram.exceptions import TelegramMigrateToChat
+
 import buttons.inline_buttons as kb
 from aiogram.filters import CommandStart, or_f, Command
 from aiogram import types, Router, F, Bot
@@ -491,23 +494,20 @@ async def show_basket(callback_or_message, state: FSMContext):
 
 
 def register_handlers_user_private(bot: Bot):
-    @user_private.callback_query(F.data == 'buy_product')
+
+    @user_private.callback_query(F.data=='buy_product')
     async def user_buy_product(callback: CallbackQuery, state: FSMContext):
         data = await state.get_data()
-        order_id = data.get('order_id')  # Replace with the actual method to get the current order_id
+        order_id = data.get('order_id')
         user = await orm_get_user_by_tg_id(callback.from_user.id)
-        order_items = await orm_get_order_items_by_order_id(order_id)  # Get all order items for this order
+        order_items = await orm_get_order_items_by_order_id(order_id)
 
         if not order_items:
-            await callback.answer(MESSAGES['ru']['basket_empty'])  # Adjust based on your message dictionary
+            await callback.answer(MESSAGES['ru']['basket_empty'])
             return
 
         total_cost = sum(item.total_cost for item in order_items)
-
-        # Create the order
         new_order = await orm_create_order(user.id, total_cost)
-
-        # Constructing the order details text for the user
         language_code = await orm_get_user_language(callback.from_user.id)
         messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
@@ -516,12 +516,7 @@ def register_handlers_user_private(bot: Bot):
         for item in order_items:
             product = await orm_get_product_by_id(item.product_id)
             category_name = await orm_get_category_name(product.category_id, language_code)
-
-            # Select the correct language fields for name
-            if language_code == 'uz':
-                product_name = product.name_uz
-            else:
-                product_name = product.name_ru
+            product_name = product.name_uz if language_code == 'uz' else product.name_ru
 
             user_text += (
                 f"{messages['category']}: {category_name}\n"
@@ -535,7 +530,6 @@ def register_handlers_user_private(bot: Bot):
                       f"\n{messages['username']}: {callback.from_user.username}\n"
                       f"{messages['phone']}: {user.phone_number}")
 
-        # Constructing the order details text for the group chat in Russian
         group_messages = MESSAGES['ru']
         group_text = f"{group_messages['order_id']}: {new_order.id}\n"
 
@@ -544,11 +538,10 @@ def register_handlers_user_private(bot: Bot):
             category_name = await orm_get_category_name(product.category_id, 'ru')
             product_name = product.name_ru
 
-            # For Excel
             await orm_save_excel_order(
                 order_id=new_order.id,
                 category_name_ru=category_name,
-                product_name_ru=product.name_ru,
+                product_name_ru=product_name,
                 product_quantity=item.quantity,
                 total_cost=item.total_cost,
                 customer_name=callback.from_user.first_name,
@@ -574,16 +567,21 @@ def register_handlers_user_private(bot: Bot):
                            f"{group_messages['username']}: @{callback.from_user.username}\n"
                            f"☎️{group_messages['phone']}: {user.phone_number}\n")
 
-        # Send the message to all group chats
         for group_id in GROUP_CHAT_IDS:
-            await bot.send_message(chat_id=group_id, text=group_text)
+            try:
+                await bot.send_message(chat_id=group_id, text=group_text)
+            except TelegramMigrateToChat as e:
+                new_group_id = e.migrate_to_chat_id
+                GROUP_CHAT_IDS.remove(group_id)
+                GROUP_CHAT_IDS.append(new_group_id)
+                await bot.send_message(chat_id=new_group_id, text=group_text)
 
-        # Clear the user's basket
-        await orm_clean_order_items_by_order_id(order_id)  # Implement this ORM function to clean the basket
+        await orm_clean_order_items_by_order_id(order_id)
         await callback.answer(messages['order_sent'])
-        await callback.message.edit_text(messages['order_sent_confirmation'])
+        await callback.message.answer(messages['order_sent_confirmation'])
         await callback.message.delete()
         await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+
 
 
 @user_private.callback_query(F.data == 'clean_basket')
@@ -612,9 +610,9 @@ async def get_orders(message: types.Message, state: FSMContext):
 async def get_textile(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     language_code = await orm_get_user_language(callback.from_user.id)
-    await callback.message.answer('https://telegra.ph/Mosmade-06-14')
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
-    await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+    await callback.message.answer('https://mosmade.ru/')
+    # messages = MESSAGES.get(language_code, MESSAGES['ru'])
+    # await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
 @user_private.callback_query(F.data == 'contacts')

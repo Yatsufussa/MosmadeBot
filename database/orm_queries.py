@@ -22,6 +22,7 @@ async def orm_update_user_language(tg_id: int, language_code: str):
             # Commit the changes
             await session.commit()
 
+
 async def orm_get_user_language(tg_id: int) -> str:
     async with SessionMaker() as session:
         result = await session.execute(select(User.language).where(User.tg_id == tg_id))
@@ -62,6 +63,7 @@ async def orm_update_category_name_ru(category_id: int, new_name_ru: str):
         else:
             return False
 
+
 async def orm_get_category_name(category_id: int, language_code: str = 'ru') -> str:
     async with SessionMaker() as session:
         # Select category asynchronously
@@ -79,6 +81,7 @@ async def orm_get_category_name(category_id: int, language_code: str = 'ru') -> 
         else:
             return category.name_ru
 
+
 async def orm_update_category_name_uz(category_id: int, new_name_uz: str):
     async with SessionMaker() as session:
         result = await session.execute(select(Category).where(Category.id == category_id))
@@ -89,6 +92,7 @@ async def orm_update_category_name_uz(category_id: int, new_name_uz: str):
             return True
         else:
             return False
+
 
 async def orm_update_category_sex(category_id: int, new_sex: str):
     async with SessionMaker() as session:
@@ -128,7 +132,8 @@ async def orm_get_product_by_id(item_id: int):
         return result.scalars().first()
 
 
-async def orm_add_product(name_ru: str,name_uz: str,description_ru: str, description_uz: str,price: float, category_id: int, image_url: str):
+async def orm_add_product(name_ru: str, name_uz: str, description_ru: str, description_uz: str, price: float,
+                          category_id: int, image_url: str):
     async with SessionMaker() as session:
         new_product = Product(
             name_ru=name_ru,
@@ -141,6 +146,7 @@ async def orm_add_product(name_ru: str,name_uz: str,description_ru: str, descrip
         )
         session.add(new_product)
         await session.commit()
+
 
 async def orm_get_products_by_category_id(category_id: int, offset: int, limit: int):
     async with SessionMaker() as session:
@@ -179,6 +185,7 @@ async def orm_update_product_name_uz(product_id: int, new_name_uz: str) -> bool:
             return True
     return False
 
+
 async def orm_update_product_price(product_id: int, new_price: float) -> bool:
     async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
@@ -198,6 +205,7 @@ async def orm_update_product_description_ru(product_id: int, new_description_ru:
             return True
     return False
 
+
 async def orm_update_product_description_uz(product_id: int, new_description_uz: str) -> bool:
     async with SessionMaker() as session:
         product = await session.scalar(select(Product).where(Product.id == product_id))
@@ -206,7 +214,6 @@ async def orm_update_product_description_uz(product_id: int, new_description_uz:
             await session.commit()
             return True
     return False
-
 
 
 async def orm_update_product_photo(product_id: int, new_photo: str) -> bool:
@@ -266,7 +273,6 @@ async def orm_u_get_categories(offset: int, limit: int, sex: str = None):
         print(f"ORM Get Categories Query: {query}\nCategories: {categories}")
 
         return categories
-
 
 
 async def get_or_create_order(user_id: int) -> Order:
@@ -359,10 +365,12 @@ async def orm_create_user_by_tg_id(tg_id: int) -> User:
         await session.refresh(new_user)
         return new_user
 
+
 async def orm_get_all_user_ids():
     async with SessionMaker() as session:
         result = await session.execute(select(User.tg_id))
         return result.scalars().all()
+
 
 async def orm_get_user_id_by_tg_id(tg_id: int) -> int:
     async with SessionMaker() as session:
@@ -380,6 +388,7 @@ async def orm_get_user_by_tg_id(tg_id: int) -> User:
         user = result.scalar()
         return user
 
+
 async def orm_update_user(user: User):
     try:
         async with SessionMaker() as session:
@@ -392,8 +401,8 @@ async def orm_update_user(user: User):
         raise
 
 
-
-async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, total_cost, customer_name, username, phone_number):
+async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, total_cost, customer_name,
+                               username, phone_number):
     async with SessionMaker() as session:
         async with session.begin():
             new_order = ExcelOrder(
@@ -408,6 +417,7 @@ async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, prod
             )
             session.add(new_order)
             await session.commit()
+
 
 async def orm_get_all_excel_orders():
     async with SessionMaker() as session:
