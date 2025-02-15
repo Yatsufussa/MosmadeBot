@@ -30,6 +30,30 @@ def get_contact_keyboard(language_code: str) -> ReplyKeyboardMarkup:
     return keyboard
 
 
+def get_location_keyboard(language_code: str) -> ReplyKeyboardMarkup:
+    if language_code == 'ru':
+        keyboard = ReplyKeyboardMarkup(keyboard=[
+            [
+                KeyboardButton(text='📍 Отправить мое местоположение', request_location=True)
+            ]
+        ], resize_keyboard=True)
+    elif language_code == 'uz':
+        keyboard = ReplyKeyboardMarkup(keyboard=[
+            [
+                KeyboardButton(text='📍 Mening manzilimni yuboring', request_location=True)
+            ]
+        ], resize_keyboard=True)
+    else:
+        keyboard = ReplyKeyboardMarkup(keyboard=[
+            [
+                KeyboardButton(text='📍 Отправить мое местоположение', request_location=True)
+            ]
+        ], resize_keyboard=True)
+
+    return keyboard
+
+
+
 # region Admin Keyboard
 admin_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Товары', callback_data='product')],
@@ -46,8 +70,7 @@ admin_category = InlineKeyboardMarkup(inline_keyboard=[
 
 admin_category_change = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Имя Категории', callback_data='change_c_name')],
-    [InlineKeyboardButton(text='Пол Категории', callback_data='change_c_sex'),
-     InlineKeyboardButton(text='Назад', callback_data='to_admin_category')]
+    [InlineKeyboardButton(text='Назад', callback_data='to_admin_category')]
 ])
 
 admin_product = InlineKeyboardMarkup(inline_keyboard=[
@@ -89,23 +112,7 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
     return markup
 
 
-def category_gender_selection_keyboard(language_code: str) -> InlineKeyboardMarkup:
-    if language_code == 'ru':
-        buttons = [
-            [InlineKeyboardButton(text="🧑🏻‍🦰 Мужчины", callback_data='gender_male'),
-             InlineKeyboardButton(text="👩🏻‍🦰 Женщины", callback_data='gender_female')],
-            [InlineKeyboardButton(text="Назад", callback_data='to_main')],
-        ]
-    elif language_code == 'uz':
-        buttons = [
-            [InlineKeyboardButton(text="🧑🏻‍🦰 Erkaklar", callback_data='gender_male'),
-             InlineKeyboardButton(text="👩🏻‍🦰 Ayollar", callback_data='gender_female')],
-            [InlineKeyboardButton(text="Orqaga", callback_data='to_main')],
-        ]
-    else:
-        buttons = []
 
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def admin_category_add_product_selection_keyboard() -> InlineKeyboardMarkup:
@@ -157,29 +164,29 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [
-                InlineKeyboardButton(text="🚀 Каталог", callback_data='catalog'),
-                InlineKeyboardButton(text="☎️ Контакты", callback_data='contacts')
+                InlineKeyboardButton(text="🚀 Tayyor BOX", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️ Помощь", callback_data='contacts')
             ],
             [
                 InlineKeyboardButton(text="🛒 Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="Интерактивное меню", url='https://mosmade.ru/')
+                InlineKeyboardButton(text="REF ссылка", callback_data='refer')
             ],
             [
-                InlineKeyboardButton(text="⚙️ Язык", callback_data='language')
+                InlineKeyboardButton(text="⚙️ Настройки", callback_data='settings')
             ]
         ]
     elif language_code == 'uz':
         buttons = [
             [
-                InlineKeyboardButton(text="🚀 Katalog", callback_data='catalog'),
-                InlineKeyboardButton(text="☎️ Aloqalar", callback_data='contacts')
+                InlineKeyboardButton(text="🚀 Tayyor BOX", callback_data='catalog'),
+                InlineKeyboardButton(text="☎️ Yordam", callback_data='contacts')
             ],
             [
                 InlineKeyboardButton(text="🛒 Savat", callback_data='basket'),
-                InlineKeyboardButton(text="🪡 Matolarimiz", callback_data='textile')
+                InlineKeyboardButton(text="REF ssilkam", callback_data='refer')
             ],
             [
-                InlineKeyboardButton(text="⚙️ Til", callback_data='language')
+                InlineKeyboardButton(text="⚙️ Sozlamalar", callback_data='settings')
             ]
         ]
     else:
@@ -402,3 +409,41 @@ async def user_categories(page: int, categories_per_page: int = 5, back_callback
                           sex: str = None):
     return await generate_category_keyboard(page, categories_per_page, 'UserCategory', 'usercategories', back_callback,
                                             language, sex)
+
+
+def settings_keyboard(language_code: str) -> InlineKeyboardMarkup:
+    if language_code == 'ru':
+        buttons = [
+            [InlineKeyboardButton(text="🌍 Изменить язык", callback_data='change_language')],
+            [InlineKeyboardButton(text="👤 Изменить личные данные", callback_data='change_personal_info')],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data='to_main')]
+        ]
+    elif language_code == 'uz':
+        buttons = [
+            [InlineKeyboardButton(text="🌍 Tilni o'zgartirish", callback_data='change_language')],
+            [InlineKeyboardButton(text="👤 Shaxsiy ma'lumotlarni o'zgartirish", callback_data='change_personal_info')],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data='to_main')]
+        ]
+    else:
+        buttons = []
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def personal_info_keyboard(language_code: str) -> InlineKeyboardMarkup:
+    if language_code == 'ru':
+        buttons = [
+            [InlineKeyboardButton(text="📞 Изменить номер телефона", callback_data='change_phone')],
+            [InlineKeyboardButton(text="📍 Изменить местоположение", callback_data='change_location')],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data='settings')]
+        ]
+    elif language_code == 'uz':
+        buttons = [
+            [InlineKeyboardButton(text="📞 Telefon raqamni o'zgartirish", callback_data='change_phone')],
+            [InlineKeyboardButton(text="📍 Joylashuvni o'zgartirish", callback_data='change_location')],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data='settings')]
+        ]
+    else:
+        buttons = []
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

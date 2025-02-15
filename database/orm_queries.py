@@ -1,9 +1,12 @@
-from sqlalchemy import func, delete
-from sqlalchemy.future import select
+from sqlalchemy import func, delete, update
+from sqlalchemy.orm import joinedload
+
 from database.engine import SessionMaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Category, Product, User, Order, OrderItem, ExcelOrder
+import uuid
+from sqlalchemy.future import select
 
 
 async def orm_update_user_language(tg_id: int, language_code: str):
@@ -359,7 +362,10 @@ async def orm_clean_order_items_by_order_id(order_id: int):
 
 async def orm_create_user_by_tg_id(tg_id: int) -> User:
     async with SessionMaker() as session:
-        new_user = User(tg_id=tg_id)
+        new_user = User(
+            tg_id=tg_id,
+            referral_code=str(uuid.uuid4())[:8]  # Generate a unique referral code
+        )
         session.add(new_user)
         await session.commit()
         await session.refresh(new_user)
@@ -422,8 +428,26 @@ async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, prod
 async def orm_get_all_excel_orders():
     async with SessionMaker() as session:
         async with session.begin():
-            result = await session.execute(select(ExcelOrder))
-            orders = result.scalars().all()
+            # Join ExcelOrder with User table to get user location data
+            result = await session.execute(
+                select(
+                    ExcelOrder.order_id,
+                    ExcelOrder.category_name_ru,
+                    ExcelOrder.product_name_ru,
+                    ExcelOrder.product_quantity,
+                    ExcelOrder.total_cost,
+                    ExcelOrder.customer_name,
+                    ExcelOrder.username,
+                    ExcelOrder.phone_number,
+                    ExcelOrder.status,  # Added status
+                    ExcelOrder.created_at,
+                    User.latitude,
+                    User.longitude
+                ).join(User, ExcelOrder.phone_number == User.phone_number)  # Join on phone number
+            )
+            orders = result.fetchall()
+
+            # Format results into a list of dictionaries
             orders_list = [
                 {
                     "order_id": order.order_id,
@@ -434,7 +458,10 @@ async def orm_get_all_excel_orders():
                     "customer_name": order.customer_name,
                     "username": order.username,
                     "phone_number": order.phone_number,
-                    "order_created_at": order.created_at
+                    "status": order.status if order.status else "pending",  # Handle status if it's None
+                    "order_created_at": order.created_at,
+                    "latitude": order.latitude,
+                    "longitude": order.longitude
                 }
                 for order in orders
             ]
@@ -446,3 +473,156 @@ async def orm_delete_all_excel_orders():
         async with session.begin():
             await session.execute(delete(ExcelOrder))
             await session.commit()
+
+
+async def orm_get_user_by_tg_id(tg_id: int) -> User:
+    async with SessionMaker() as session:
+        result = await session.execute(select(User).filter(User.tg_id == tg_id))
+        user = result.scalar()
+        return user
+
+
+# Query to fetch user by referral code
+async def orm_get_user_by_referral_code(referral_code: str) -> User:
+    async with SessionMaker() as session:
+        result = await session.execute(select(User).filter(User.referral_code == referral_code))
+        user = result.scalar()
+        return user
+
+
+async def is_user_location_missing(tg_id: int) -> bool:
+    user = await orm_get_user_by_tg_id(tg_id)
+    if user:
+        # Check if either longitude or latitude is None
+        if user.longitude is None or user.latitude is None:
+            return True
+        return False
+    return None  # User not found
+
+
+async def orm_update_user_location(tg_id: int, latitude: float, longitude: float):
+    user = await orm_get_user_by_tg_id(tg_id)
+    if user:
+        user.latitude = latitude
+        user.longitude = longitude
+        async with SessionMaker() as session:
+            try:
+                async with session.begin():
+                    session.add(user)
+                    await session.commit()
+                    return True  # Location successfully updated
+            except Exception as e:
+                print(f"Error updating user's location: {e}")
+                await session.rollback()
+                return False
+    return False  # User not found
+
+
+async def save_user_location(tg_id: int, latitude: float, longitude: float):
+    if await is_user_location_missing(tg_id):
+        updated = await orm_update_user_location(tg_id, latitude, longitude)
+        if updated:
+            return "Location updated successfully!"
+        else:
+            return "Failed to update location."
+    else:
+        return "User already has location information."
+
+
+async def orm_save_user(user: User):
+    async with SessionMaker() as session:
+        async with session.begin():
+            session.add(user)
+
+
+async def orm_get_referred_users_count(user_id: int):
+    # Query to count the number of users who were referred by the current user
+    async with SessionMaker() as session:
+        # Perform the query to find all users referred by the current user
+        result = await session.execute(select(User).filter(User.referred_by == user_id))
+
+        # Get the count of referred users
+        referred_users_count = len(result.scalars().all())
+
+    return referred_users_count
+
+
+async def orm_get_referred_users_with_orders_count(user_id: int):
+    # Query to count the number of referred users who have at least one order
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(User).join(Order, Order.user_id == User.id)  # Join User with Order
+            .filter(User.referred_by == user_id)  # Filter by the current user
+            .distinct()  # Ensure unique users
+        )
+        referred_users_with_orders_count = len(
+            result.scalars().all())  # Count the number of referred users who have orders
+    return referred_users_with_orders_count
+
+
+async def orm_delete_order_by_id(order_id: int):
+    async with SessionMaker() as session:
+        order = await session.get(Order, order_id)
+        if order:
+            await session.delete(order)
+            await session.commit()
+
+
+async def update_excel_order_status_to_cancelled(order_id: int):
+    async with SessionMaker() as session:
+        await session.execute(
+            update(ExcelOrder)
+            .where(ExcelOrder.order_id == order_id)
+            .values(status="cancelled")
+        )
+        await session.commit()
+
+
+async def update_order_status_to_finished(order_id: int):
+    async with SessionMaker() as session:
+        await session.execute(
+            update(ExcelOrder)
+            .where(ExcelOrder.order_id == order_id)
+            .values(status="finished")
+        )
+        await session.commit()
+
+
+async def orm_get_user_location(user_id: int):
+    async with SessionMaker() as session:
+        # Query the User table to get latitude and longitude for the given user
+        result = await session.execute(
+            select(User.latitude, User.longitude).filter(User.id == user_id)
+        )
+        # Fetch the result as a tuple (latitude, longitude)
+        location = result.fetchone()  # Use fetchone() instead of scalars().first()
+
+        if location:
+            latitude = location[0]  # Latitude (Decimal)
+            longitude = location[1]  # Longitude (Decimal)
+            return latitude, longitude
+        return None
+
+
+async def orm_update_user_phone(user_id: int, new_phone: str):
+    async with SessionMaker() as session:
+        user = await session.get(User, user_id)
+        if user:
+            user.phone_number = new_phone
+            await session.commit()
+
+
+async def orm_update_user_location(user_id: int, latitude: float, longitude: float):
+    async with SessionMaker() as session:
+        user = await session.get(User, user_id)
+        if user:
+            user.latitude = latitude
+            user.longitude = longitude
+            await session.commit()
+
+
+async def orm_get_order_by_id(order_id):
+    async with SessionMaker() as session:
+        return await session.get(
+            Order, order_id, options=[joinedload(Order.user)]
+        )

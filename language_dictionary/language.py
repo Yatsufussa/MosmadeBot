@@ -6,7 +6,7 @@ LANGUAGES = {
 
 # Messages in Russian
 MESSAGES_RU = {
-    'welcome': "Добро пожаловать в интернет магазин Mosmade!",
+    'welcome': "Добро пожаловать в интернет магазин TAYYOR BOX!",
     'language_prompt': "Выберите язык интерфейса:",
     'language_selected': "Язык интерфейса установлен: Русский",
     'main_menu': "Главное меню",
@@ -20,6 +20,8 @@ MESSAGES_RU = {
     'quantity': 'Количество',
     'product_not_found': 'Товар не найден',
     'request_phone_number': 'Поделитесь номером телефона',
+    'request_location': 'Поделитесь локацией',
+    'location_saved': 'Адресс сохранён',
     'basket_empty': 'Корзина пуста.',
     'basket_items': 'Ваши товары в корзине🛍',
     'total_cost': 'Общая стоимость',
@@ -31,6 +33,7 @@ MESSAGES_RU = {
     'contact_prompt': 'Пожалуйста, отправьте ваш номер телефона:',
     'order_id': 'Номер заказа',
     'username': '🎭Username',
+    'no_username': '🎭No username',
     'phone': 'Номер Телефона',
     'order_sent': 'Ваш Заказ Отправлен!\nОжидайте обратной связи',
     'order_sent_confirmation': 'Ваш Заказ Отправлен!',
@@ -42,12 +45,30 @@ MESSAGES_RU = {
     'show_basket': '🛍 Перейти к Корзине',
     'number_saved': 'Ваш Номер Сохранен',
     'currency': 'Сум',
+    'refer_message': 'Информация о ваших рефералах',
+    'your_referral_code': 'Ваша реферальная ссылка',
+    'share_with_friends': 'Зарегистрируйся пожалуйста по моей реферальной ссылке',
+    'invite_5_people': 'Поделись с 5 друзьями',
+    'your_referral_link': 'Что бы пройти по реферальной ссылке нажмите',
+    'send_question': "Пожалуйста, напишите ваш вопрос, и мы передадим его администратору.",
+    'question_sent': "Ваш вопрос был успешно отправлен. Спасибо!",
+    'referred_users_count': "Общее количество рефералов",
+    'referred_users_with_orders_count': "Подтверждённые рефералы",
+    'send_phone_prompt': "📱 Нажмите кнопку ниже, чтобы отправить номер телефона:",
+    'phone_updated': "✅ Ваш номер телефона обновлён!",
+    'send_location_prompt': "📍 Отправьте вашу локацию:",
+    'send_location_button': "📍 Нажмите кнопку ниже, чтобы отправить местоположение:",
+    'location_updated': "✅ Ваше местоположение обновлено!",
+    'choose_info_to_change': "Выберите, что хотите изменить:",
+    'current_phone': "📞 Ваш текущий номер телефона",
+    'location': "📍 Ваше текущее местоположение",
+    'no_location': "📍 Местоположение не установлено",
 }
 
 
 # Messages in Uzbek
 MESSAGES_UZ = {
-    'welcome': "Mosmade do'koniga xush kelibsiz!",
+    'welcome': "TAYYOR BOX do'koniga xo'sh kelibsiz!",
     'language_prompt': "Interfeys tilini tanlang:",
     'language_selected': "Interfeys tili tanlandi: Oʻzbek tili",
     'main_menu': "Asosiy menyu",
@@ -61,6 +82,8 @@ MESSAGES_UZ = {
     'quantity': 'Miqdori',
     'product_not_found': 'Mahsulot topilmadi',
     'request_phone_number': 'Telefon Raqamini Yuboring',
+    'request_location': 'Adresingizni Yuboring',
+    'location_saved': 'Adresingizni Saqlandi',
     'basket_empty': "🗑Savat bo'sh.",
     'basket_items': 'Savatdagi mahsulotlar🛍',
     'total_cost': 'Umumiy narx',
@@ -72,6 +95,7 @@ MESSAGES_UZ = {
     'contact_prompt': 'Iltimos, telefon raqamingizni yuboring:',
     'order_id': 'Buyurtma raqami',
     'username': '🎭 Username',
+    'no_username': '🎭 No username',
     'phone': 'Telefon Raqami',
     'order_sent': 'Zakaziz Qabul qilinde!\nQaytib Aloqaga Chiqamz',
     'order_sent_confirmation': 'Zakaziz Qabul qilinde!',
@@ -83,6 +107,27 @@ MESSAGES_UZ = {
     'show_basket': '🛍 Savatga Utish',
     'number_saved': 'Telefon Raqamingiz Saqlandi',
     'currency': "So'm",
+    'refer_message': "Referallaringiz haqida ma'lumot",
+    'your_referral_code': 'Sizning referal sillkangiz',
+    'share_with_friends': "Referall sillkamdan registratsiya qiling",
+    'invite_5_people': "5 Do'stinga jo'nat",
+    'your_referral_link': "Referal ssilkadan o'tish uchun bosing",
+    'send_question': "Iltimos, savolingizni yozing, va biz uni administratorga yetkazamiz.",
+    'question_sent': "Sizning savolingiz muvaffaqiyatli yuborildi. Rahmat!",
+    'referred_users_count': "Umumiy referallar so'ni",
+    'referred_users_with_orders_count': "Tasdiqlangan referallar",
+    'send_phone_prompt': "📱 Telefon raqamingizni yuborish uchun quyidagi tugmani bosing:",
+    'phone_updated': "✅ Telefon raqamingiz yangilandi!",
+    'send_location_prompt': "📍 Joylashuvingizni yuboring:",
+    'send_location_button': "📍 Joylashuvingizni yuborish uchun quyidagi tugmani bosing:",
+    'location_updated': "✅ Joylashuvingiz yangilandi!",
+    'choose_info_to_change': "Qaysi ma'lumotni o'zgartirmoqchisiz?",
+    'current_phone': "📞 Sizning joriy telefon raqamingiz",
+    'location': "📍 Sizning joriy joylashuvingiz",
+    'no_location': "📍 Joylashuv o'rnatilmagan",
+
+
+
 }
 GENDER_MAPPING = {
     'male': 'мужской',

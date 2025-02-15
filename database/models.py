@@ -1,8 +1,17 @@
-from sqlalchemy import Column, Integer, String, Text, DECIMAL, TIMESTAMP, ForeignKey, Float, BigInteger
+import random
+import string
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DECIMAL, TIMESTAMP, Text, BigInteger, Numeric
+from sqlalchemy.orm import relationship, declared_attr
 from sqlalchemy.sql import func
-from sqlalchemy.orm import declared_attr, relationship
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import DeclarativeBase
 
+Base = declarative_base()
+
+
+def generate_referral_code():
+    """Generate a unique referral code."""
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
 class Base(DeclarativeBase):
     metatada = None
@@ -23,9 +32,16 @@ class User(Base):
     tg_id = Column(BigInteger, unique=True, nullable=False)
     phone_number = Column(String(15), nullable=True)
     language = Column(String(2), nullable=False, default='ru')  # Storing user's preferred language
+    longitude = Column(Numeric(10, 6), nullable=True) # Longitude of the user's location
+    latitude = Column(Numeric(10, 6), nullable=True)  # Latitude of the user's location
+
+    referral_code = Column(String(8), unique=True, default=generate_referral_code)  # Unique referral code for the user
+    referred_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Foreign key to the user who referred them
+
+    # Relationship to track who referred the user
+    referrer = relationship("User", backref="referred_users", remote_side=[id])
 
     orders = relationship("Order", back_populates="user")
-
 
 class Category(Base):
     __tablename__ = 'categories'
@@ -33,7 +49,6 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name_ru = Column(String(255), nullable=False)
     name_uz = Column(String(255), nullable=False)
-    sex = Column(String(255), nullable=False)
 
     products = relationship("Product", back_populates="category")
 
@@ -89,5 +104,7 @@ class ExcelOrder(Base):
     product_quantity = Column(Integer, nullable=False)
     total_cost = Column(Float, nullable=False)
     customer_name = Column(String(255), nullable=False)
-    username = Column(String(255), nullable=False)
+    username = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # Default status set to 'pending'
+
