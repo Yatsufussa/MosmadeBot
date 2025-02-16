@@ -1,6 +1,7 @@
 import locale
+from datetime import datetime
 from typing import Union
-
+from decimal import Decimal
 from aiogram.client import bot
 from aiogram.exceptions import TelegramMigrateToChat
 from integrations.yandex import get_address_from_coordinates
@@ -19,7 +20,9 @@ from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create
     orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name, orm_save_excel_order, \
     orm_create_user_by_tg_id, orm_get_user_by_referral_code, orm_save_user, save_user_location, \
     orm_get_referred_users_count, orm_get_referred_users_with_orders_count, orm_get_user_location, \
-    orm_update_user_location, orm_update_user_phone
+    orm_update_user_location, orm_update_user_phone, orm_get_promo_code_by_text, orm_activate_promo_code_for_user, \
+    orm_get_promo_code_by_id, orm_get_orders_by_user_id, \
+    orm_get_excel_orders_by_user_phone
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
@@ -143,8 +146,15 @@ async def to_main(event: Union[CallbackQuery, Message], state: FSMContext, first
         message = event.message  # Это callback, достаём message
 
     tg_id = message.from_user.id
-    language_code = await orm_get_user_language(tg_id)
-    await state.update_data(language_code=language_code)
+
+    # Сначала пытаемся взять язык из FSMContext
+    user_data = await state.get_data()
+    language_code = user_data.get("language_code")
+
+    if not language_code:
+        # Если в FSMContext нет языка, берем его из БД
+        language_code = await orm_get_user_language(tg_id)
+        await state.update_data(language_code=language_code)  # Сохраняем в FSMContext
 
     messages = MESSAGES.get(language_code, MESSAGES['ru'])  # По умолчанию русский
 
@@ -152,10 +162,18 @@ async def to_main(event: Union[CallbackQuery, Message], state: FSMContext, first
         await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
     else:
         try:
-            await message.edit_text(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+            if message.photo or message.video:
+                await message.delete()
+                await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+            else:
+                await message.edit_text(
+                    text=messages['welcome'],
+                    reply_markup=kb.main_menu_keyboard(language_code)
+                )
         except Exception as e:
-            print(f"Ошибка при редактировании сообщения: {e}")
+            print(f"Ошибка при редактировании или удалении сообщения: {e}")
             await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+
 
 
 @user_private.callback_query(F.data == 'catalog')
@@ -166,62 +184,54 @@ async def catalog(callback: CallbackQuery, state: FSMContext):
     language_code = await orm_get_user_language(callback.from_user.id)
     messages = MESSAGES.get(language_code, MESSAGES['ru'])  # Default to Russian if language code is not found
 
-    data = await state.get_data()
-    message_type = data.get('message_type', 'text')  # Retrieve the message type from the state
+    # Define the single category ID (replace with your actual category ID)
+    single_category_id = 1  # Replace with your actual category ID
 
-    if message_type == 'photo':
-        # Delete the previous message
-        await callback.message.delete()
+    # Update the state with the category ID
+    await state.update_data(category_id=single_category_id)
 
-        # Show categories directly without asking for gender
-        await callback.message.answer(
-            text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
-                                                  language=language_code)
-        )
-    else:
-        # Edit the existing message to show categories directly
-        await callback.message.edit_text(
-            text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main', page=1, categories_per_page=4,
-                                                  language=language_code)
-        )
-
-
-@user_private.callback_query(F.data.startswith('usercategories_'))
-async def categories_pagination(callback: CallbackQuery, state: FSMContext):
-    page = int(callback.data.split('_')[1])
-    data = await state.get_data()
-    sex = data.get('sex', None)
-
-    await callback.answer('')
-
-    # Get the user's preferred language
-    language_code = await orm_get_user_language(callback.from_user.id)
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
-
+    # Show products directly from the single category
     await callback.message.edit_text(
-        messages['category_menu'],
-        reply_markup=await kb.user_categories(back_callback='catalog', page=page, categories_per_page=4,
-                                              language=language_code, sex=sex)
+        text=messages['product_menu'],
+        reply_markup=await kb.items(single_category_id, page=1, items_per_row=3, language=language_code,
+                                    back_callback='to_main')
     )
 
 
-@user_private.callback_query(F.data.startswith('UserCategory_'))
-async def category(callback: CallbackQuery, state: FSMContext):
-    category_id = int(callback.data.split('_')[1])
-    await state.update_data(category_id=category_id)
-    await callback.answer('')
-
-    # Get the user's preferred language
-    language_code = await orm_get_user_language(callback.from_user.id)
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
-
-    await callback.message.edit_text(
-        messages['product_menu'],
-        reply_markup=await kb.items(category_id, page=1, items_per_row=3, language=language_code,
-                                    back_callback='catalog')
-    )
+# @user_private.callback_query(F.data.startswith('usercategories_'))
+# async def categories_pagination(callback: CallbackQuery, state: FSMContext):
+#     page = int(callback.data.split('_')[1])
+#     data = await state.get_data()
+#     sex = data.get('sex', None)
+#
+#     await callback.answer('')
+#
+#     # Get the user's preferred language
+#     language_code = await orm_get_user_language(callback.from_user.id)
+#     messages = MESSAGES.get(language_code, MESSAGES['ru'])
+#
+#     await callback.message.edit_text(
+#         messages['category_menu'],
+#         reply_markup=await kb.user_categories(back_callback='catalog', page=page, categories_per_page=4,
+#                                               language=language_code, sex=sex)
+#     )
+#
+#
+# @user_private.callback_query(F.data.startswith('UserCategory_'))
+# async def category(callback: CallbackQuery, state: FSMContext):
+#     category_id = int(callback.data.split('_')[1])
+#     await state.update_data(category_id=category_id)
+#     await callback.answer('')
+#
+#     # Get the user's preferred language
+#     language_code = await orm_get_user_language(callback.from_user.id)
+#     messages = MESSAGES.get(language_code, MESSAGES['ru'])
+#
+#     await callback.message.edit_text(
+#         messages['product_menu'],
+#         reply_markup=await kb.items(category_id, page=1, items_per_row=3, language=language_code,
+#                                     back_callback='catalog')
+#     )
 
 
 @user_private.callback_query(F.data.startswith('itemscategory_'))
@@ -244,7 +254,7 @@ async def category_pagination(callback: CallbackQuery, state: FSMContext):
 
 @user_private.callback_query(F.data.startswith('item_'))
 async def update_product_view(callback: CallbackQuery, state: FSMContext):
-    product_id = callback.data.split('_')[1]  # No int() conversion needed
+    product_id = callback.data.split('_')[1]
     product = await orm_get_product_by_id(product_id)
 
     # Get the user's preferred language
@@ -264,25 +274,47 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
                                 product_name=product_name,
                                 quantity=1)
 
-        price_formatted = locale.format_string('%d', product.price, grouping=True)  # Format price without decimals
+        # Get the user's active promo code
+        user = await orm_get_user_by_tg_id(callback.from_user.id)
+        discount = Decimal(0)  # Initialize discount as Decimal
+        if user and user.active_promo_code_id:
+            promo_code = await orm_get_promo_code_by_id(user.active_promo_code_id)
+            if promo_code and (not promo_code.expiry_date or promo_code.expiry_date > datetime.now()):
+                discount = Decimal(str(promo_code.discount))  # Convert discount to Decimal
+
+        # Calculate the discounted price
+        price = product.price  # Default price
+        discounted_price_text = ""  # Initialize empty text for discounted price
+
+        if discount > 0:  # Only apply discount if it exists
+            discounted_price = product.price * (Decimal(1) - discount / Decimal(100))
+            discounted_price_formatted = locale.format_string('%d', discounted_price, grouping=True)
+            discounted_price_text = f"{messages['discounted_price']}: {discounted_price_formatted} {messages['currency']}\n"
+
+        price_formatted = locale.format_string('%d', product.price, grouping=True)
+
         text = (
             f"{messages['product_name']}: {product_name}\n"
             f"{messages['product_description']}: {product_description}\n"
             f"{messages['product_price']}: {price_formatted} {messages['currency']}\n"
-            f"{messages['product_quantity']}: {1}\n\n"  # Default quantity is set to 1
+            f"{discounted_price_text}"  # Only added if discount exists
+            f"{messages['product_quantity']}: {1}\n\n"
         )
-        if product.image_url:
-            data = await state.get_data()
-            quantity = data.get('quantity', 1)
-            keyboard = kb.create_product_buttons(quantity, language_code=language_code)
-            await state.update_data(message_type='photo')  # Update state with message type
-            await callback.message.delete()
-            await callback.message.answer_photo(photo=product.image_url,
-                                                caption=text,
-                                                reply_markup=keyboard)
+
+        data = await state.get_data()
+        quantity = data.get('quantity', 1)
+        keyboard = kb.create_product_buttons(quantity, language_code=language_code)
+
+        if product.video_url:
+            await state.update_data(message_type='video')  # Update state with message type
+            await callback.message.delete()  # Delete the previous message
+            await callback.message.answer_video(
+                video=product.video_url,
+                caption=text,
+                reply_markup=keyboard
+            )
         else:
-            await state.update_data(message_type='text')  # Update state with message type
-            await callback.message.edit_text(text, reply_markup=None)
+            await callback.message.edit_text(text, reply_markup=keyboard)
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
@@ -314,23 +346,63 @@ async def update_product_text(callback: CallbackQuery, state: FSMContext):
             product_name = product.name_ru
             product_description = product.description_ru
 
-        total_price = product.price * quantity
-        total_price_formatted = locale.format_string('%d', total_price,
-                                                     grouping=True)  # Format total price without decimals
+        # Get the user's active promo code
+        user = await orm_get_user_by_tg_id(callback.from_user.id)
+        discount = 0
+        if user and user.active_promo_code_id:
+            promo_code = await orm_get_promo_code_by_id(user.active_promo_code_id)
+            if promo_code and (not promo_code.expiry_date or promo_code.expiry_date > datetime.now()):
+                discount = promo_code.discount
+
+        # Calculate the discounted price
+        total_price = product.price * quantity * (Decimal(1) - Decimal(discount) / Decimal(100))
+        total_price_formatted = locale.format_string('%d', total_price, grouping=True)  # Discounted price
+        original_price_formatted = locale.format_string('%d', product.price * quantity, grouping=True)  # Original price
 
         text = (
             f"{messages['product_name']}: {product_name}\n"
             f"{messages['product_description']}: {product_description}\n"
-            f"{messages['product_price']}: {total_price_formatted} {messages['currency']}\n"
-            f"{messages['product_quantity']}: {quantity}\n\n"
+            f"{messages['original_price']}: {original_price_formatted} {messages['currency']}\n"
         )
 
-        if product.image_url:
+        if discount > 0:
+            text += f"{messages['discounted_price']}: {total_price_formatted} {messages['currency']}\n"
+
+        text += f"{messages['product_quantity']}: {quantity}\n\n"
+
+        # Check if the product has a video
+        if product.video_url:
             keyboard = kb.create_product_buttons(quantity, language_code)
-            await callback.message.edit_caption(caption=text,
-                                                reply_markup=keyboard)
+            try:
+                # Edit the video message caption
+                await callback.message.edit_caption(
+                    caption=text,
+                    reply_markup=keyboard
+                )
+            except Exception as e:
+                print(f"Error editing video caption: {e}")
+                # If editing fails, send a new video message
+                await callback.message.delete()
+                await callback.message.answer_video(
+                    video=product.video_url,
+                    caption=text,
+                    reply_markup=keyboard
+                )
         else:
-            await callback.message.edit_text(text, reply_markup=None)
+            # If there's no video, edit the text message
+            keyboard = kb.create_product_buttons(quantity, language_code)
+            try:
+                await callback.message.edit_text(
+                    text=text,
+                    reply_markup=keyboard
+                )
+            except Exception as e:
+                print(f"Error editing text message: {e}")
+                # If editing fails, send a new text message
+                await callback.message.answer(
+                    text=text,
+                    reply_markup=keyboard
+                )
     else:
         await callback.message.edit_text(
             messages['product_not_found'],
@@ -341,6 +413,7 @@ async def update_product_text(callback: CallbackQuery, state: FSMContext):
         )
 
 
+# Function to handle plus one
 # Function to handle plus one
 @user_private.callback_query(F.data == 'plus_one')
 async def handle_plus_one(callback: CallbackQuery, state: FSMContext):
@@ -367,8 +440,6 @@ async def handle_minus_one(callback: CallbackQuery, state: FSMContext):
     if quantity > 1:
         quantity -= 1
         await state.update_data(quantity=quantity)
-
-        # Directly update the product view text after updating the quantity
         await update_product_text(callback, state)
 
 
@@ -520,21 +591,33 @@ async def show_basket(callback_or_message, state: FSMContext):
     language_code = await orm_get_user_language(tg_id)
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
+    # Get the user's active promo code
+    user = await orm_get_user_by_tg_id(tg_id)
+    discount = Decimal(0)  # Initialize discount as Decimal
+    if user and user.active_promo_code_id:
+        promo_code = await orm_get_promo_code_by_id(user.active_promo_code_id)
+        if promo_code and (not promo_code.expiry_date or promo_code.expiry_date > datetime.now()):
+            discount = Decimal(str(promo_code.discount))  # Convert discount to Decimal
+
     text = messages['basket_items'] + "\n\n"
-    total_cost = 0
+    total_cost = Decimal(0)
 
     for item in order_items:
         product = await orm_get_product_by_id(item.product_id)
-        item_cost = item.total_cost
-        total_cost += item_cost
 
-        # Select the correct language fields for name and price
-        if language_code == 'uz':
-            product_name = product.name_uz
+        # Apply discount if available
+        if discount > 0:
+            item_price = product.price * (Decimal(1) - discount / Decimal(100))
         else:
-            product_name = product.name_ru  # Default to Russian if language code is invalid
+            item_price = product.price
 
-        # Format total cost and product price with thousands separator
+        item_cost = item_price * item.quantity  # Now using discounted price
+        total_cost += item_cost  # Sum up correctly
+
+        # Select product name based on language
+        product_name = product.name_uz if language_code == 'uz' else product.name_ru
+
+        # Format individual item prices
         formatted_price = locale.format_string('%d', product.price, grouping=True)
         formatted_item_cost = locale.format_string('%d', item_cost, grouping=True)
 
@@ -542,13 +625,19 @@ async def show_basket(callback_or_message, state: FSMContext):
             f"{messages['product_name']}: {product_name}\n\n"
             f"{messages['product_price']}: {formatted_price} {messages['currency']}.\n"
             f"{messages['product_quantity']}: {item.quantity}\n"
-            f"{messages['total_cost']}: {formatted_item_cost} {messages['currency']}\n\n"
         )
 
-    # Format total order cost with thousands separator
-    formatted_total_cost = locale.format_string('%d', total_cost, grouping=True)
+        # Show discount line only if discount exists
+        if discount > 0:
+            discounted_price_formatted = locale.format_string('%d', item_price, grouping=True)
+            text += f"{messages['discounted_price']}: {discounted_price_formatted} {messages['currency']}\n"
 
+        text += f"{messages['total_cost']}: {formatted_item_cost} {messages['currency']}\n\n"
+
+    # Format total cost with thousands separator
+    formatted_total_cost = locale.format_string('%d', total_cost, grouping=True)
     text += f"{messages['total_order_cost']}: {formatted_total_cost} {messages['currency']}"
+
     await message.delete()
     await message.answer(text, reply_markup=kb.create_basket_buttons(language_code))
 
@@ -565,39 +654,31 @@ def register_handlers_user_private(bot: Bot):
             await callback.answer(MESSAGES['ru']['basket_empty'])
             return
 
-        total_cost = sum(item.total_cost for item in order_items)
-        new_order = await orm_create_order(user.id, total_cost)
-        language_code = await orm_get_user_language(callback.from_user.id)
-        messages = MESSAGES.get(language_code, MESSAGES['ru'])
+        # ✅ Calculate initial total cost
+        total_cost = sum(Decimal(item.total_cost) for item in order_items)
+        discounted_cost = total_cost  # Default to initial cost
 
-        # 🛒 Constructing the order details
-        user_text = f"{messages['order_id']}: {new_order.id}\n"
+        # ✅ Check for an active promo code
+        promo_code = None  # Initialize before usage
+        promo_code_text = ""
 
-        for item in order_items:
-            product = await orm_get_product_by_id(item.product_id)
-            category_name = await orm_get_category_name(product.category_id, language_code)
-            product_name = product.name_uz if language_code == 'uz' else product.name_ru
+        if user and user.active_promo_code_id:
+            promo_code = await orm_get_promo_code_by_id(user.active_promo_code_id)
+            if promo_code and (not promo_code.expiry_date or promo_code.expiry_date > datetime.now()):
+                discount_percentage = Decimal(promo_code.discount)
+                discounted_cost = total_cost * (Decimal(1) - discount_percentage / Decimal(100))
+                promo_code_text = f"{MESSAGES['ru']['promo_applied']}: {promo_code.code} (-{discount_percentage}%)\n"
 
-            user_text += (
-                f"{messages['category']}: {category_name}\n"
-                f"{messages['product_name']}: {product_name}\n"
-                f"{messages['quantity']}: {item.quantity}\n"
-                f"{messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {messages['currency']}\n\n"
-            )
-
-        user_text += f"{messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
-        user_text += (f"{messages['customer_name']}: {callback.from_user.first_name},\n"
-                      f"{messages['username']}: {f'@{callback.from_user.username}' if callback.from_user.username else messages['no_username']}\n"
-                      f"{messages['phone']}: {user.phone_number}")
+        # ✅ Create a new order
+        new_order = await orm_create_order(user.id, discounted_cost)
 
         # 📍 Get and format user's location
         user_location = await orm_get_user_location(user.id)
+        location_text = ""
         if user_location:
             latitude, longitude = user_location
             location_name = await get_address_from_coordinates(latitude, longitude)
-
-            # Append formatted location name to user message
-            user_text += f"\n{messages['location']}: {location_name}"
+            location_text = f"{MESSAGES['ru']['location']}: {location_name}\n"
 
         # 📢 Constructing group message
         group_messages = MESSAGES['ru']
@@ -613,27 +694,35 @@ def register_handlers_user_private(bot: Bot):
                 category_name_ru=category_name,
                 product_name_ru=product_name,
                 product_quantity=item.quantity,
-                total_cost=item.total_cost,
+                initial_cost=item.total_cost,
+                promo_code_name=promo_code.code if promo_code else None,
+                promo_discount_percentage=float(promo_code.discount) if promo_code else None,
+                total_cost=item.total_cost * (Decimal(1) - (
+                            Decimal(promo_code.discount) / Decimal(100))) if promo_code else item.total_cost,
                 customer_name=callback.from_user.first_name,
                 username=callback.from_user.username,
                 phone_number=user.phone_number
             )
 
             group_text += (
-                f"{group_messages['category']}: {category_name}\n"
+                # f"{group_messages['category']}: {category_name}\n"
                 f"{group_messages['product_name']}: {product_name}\n"
                 f"{group_messages['quantity']}: {item.quantity}\n"
-                f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {messages['currency']}\n\n"
+                f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {group_messages['currency']}\n\n"
             )
 
-        group_text += f"💰{group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {messages['currency']}\n\n"
-        group_text += (f"{group_messages['customer_name']}: {callback.from_user.first_name},\n"
-                       f"{group_messages['username']}: {f'@{callback.from_user.username}' if callback.from_user.username else group_messages['no_username']}\n"
-                       f"☎️{group_messages['phone']}: {user.phone_number}")
+        # ✅ Add promo code and discounted cost if applied
+        group_text += f"\n💰 {group_messages['total_order_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {group_messages['currency']}\n"
+        if promo_code_text:
+            group_text += promo_code_text
+            group_text += f"💸 {group_messages['discounted_cost']}: {locale.format_string('%d', discounted_cost, grouping=True)} {group_messages['currency']}\n"
 
-        # 📍 Append formatted location name to group message
-        if user_location:
-            group_text += f"\n{group_messages['location']}: {location_name}"
+        group_text += (
+            f"{group_messages['customer_name']}: {callback.from_user.first_name},\n"
+            f"{group_messages['username']}: {f'@{callback.from_user.username}' if callback.from_user.username else group_messages['no_username']}\n"
+            f"☎️ {group_messages['phone']}: {user.phone_number}\n"
+            f"{location_text}"
+        )
 
         # 🚀 Send messages to group chats
         for group in GROUP_CHAT_IDS_WITH_THREADS:
@@ -647,21 +736,41 @@ def register_handlers_user_private(bot: Bot):
                 new_group_id = e.migrate_to_chat_id
                 GROUP_CHAT_IDS_WITH_THREADS.remove(group)
                 GROUP_CHAT_IDS_WITH_THREADS.append(
-                    {"chat_id": new_group_id, "message_thread_id": group.get("message_thread_id")})
+                    {"chat_id": new_group_id, "message_thread_id": group.get("message_thread_id")}
+                )
                 await bot.send_message(
                     chat_id=new_group_id,
                     text=group_text,
                     message_thread_id=group.get("message_thread_id")
                 )
 
-        # 📩 Send confirmation to user
-        await bot.send_message(chat_id=callback.from_user.id, text=group_text)
+        # ✅ Send confirmation to the user (without order details)
+        user_confirmation = f"{group_messages['order_sent_confirmation']}\n\n"
 
-        await orm_clean_order_items_by_order_id(order_id)
-        await callback.answer(messages['order_sent'])
-        await callback.message.answer(messages['order_sent_confirmation'])
+        # Добавляем список товаров
+        user_confirmation += f"{group_messages['order_items']}:\n"
+        for item in order_items:
+            product = await orm_get_product_by_id(item.product_id)
+            product_name = product.name_ru  # Используем русский язык
+            user_confirmation += f"• {product_name} ({item.quantity} {group_messages['quantity_unit']})\n"
+
+        if promo_code_text:
+            user_confirmation += (
+                f"\n{group_messages['initial_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {group_messages['currency']}\n"
+                f"{promo_code_text}"
+                f"{group_messages['discounted_cost']}: {locale.format_string('%d', discounted_cost, grouping=True)} {group_messages['currency']}\n"
+            )
+
+        if location_text:
+            user_confirmation += f"\n{location_text}\n"
+
+        await callback.answer(group_messages['order_sent'])
+        await callback.message.answer(user_confirmation)
         await callback.message.delete()
-        await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+        await callback.message.answer(group_messages['welcome'], reply_markup=kb.main_menu_keyboard('ru'))
+
+        # ✅ Clear the order items from the basket
+        await orm_clean_order_items_by_order_id(order_id)
 
     @user_private.message(UserQuestionState.awaiting_question)
     async def forward_user_question(message: Message, state: FSMContext):
@@ -892,33 +1001,33 @@ async def save_new_location(message: Message, state: FSMContext):
     await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
-@user_private.callback_query(F.data == 'private_add_product')
-async def to_category(callback: CallbackQuery, state: FSMContext):
-    await callback.answer('')
-    data = await state.get_data()
-    message_type = data.get('message_type', 'text')
-
-    # Get the user's preferred language
-    language_code = await orm_get_user_language(callback.from_user.id)
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
-    if message_type == 'photo':
-        # Delete photo message
-        await callback.message.delete()
-        await callback.message.answer(
-            text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main',
-                                                  page=1,
-                                                  categories_per_page=4,
-                                                  language=language_code)
-        )
-    else:
-        await callback.message.edit_text(
-            text=messages['category_menu'],
-            reply_markup=await kb.user_categories(back_callback='to_main',
-                                                  page=1,
-                                                  categories_per_page=4,
-                                                  language=language_code)
-        )
+# @user_private.callback_query(F.data == 'private_add_product')
+# async def to_category(callback: CallbackQuery, state: FSMContext):
+#     await callback.answer('')
+#     data = await state.get_data()
+#     message_type = data.get('message_type', 'text')
+#
+#     # Get the user's preferred language
+#     language_code = await orm_get_user_language(callback.from_user.id)
+#     messages = MESSAGES.get(language_code, MESSAGES['ru'])
+#     if message_type == 'photo':
+#         # Delete photo message
+#         await callback.message.delete()
+#         await callback.message.answer(
+#             text=messages['category_menu'],
+#             reply_markup=await kb.user_categories(back_callback='to_main',
+#                                                   page=1,
+#                                                   categories_per_page=4,
+#                                                   language=language_code)
+#         )
+#     else:
+#         await callback.message.edit_text(
+#             text=messages['category_menu'],
+#             reply_markup=await kb.user_categories(back_callback='to_main',
+#                                                   page=1,
+#                                                   categories_per_page=4,
+#                                                   language=language_code)
+#         )
 
 
 @user_private.message(F.location)
@@ -938,3 +1047,138 @@ async def location_received(message: Message, state: FSMContext):
 
     # Proceed with any next actions (e.g., showing basket)
     await show_basket(message, state)
+
+
+class PromoCodeState(StatesGroup):
+    enter_promo_code = State()  # Step 1: Enter the promo code text
+
+
+@user_private.callback_query(F.data == 'promo_code')
+async def activate_promo_code(callback: CallbackQuery, state: FSMContext):
+    language_code = await orm_get_user_language(callback.from_user.id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    await state.update_data(language_code=language_code)  # Сохраняем язык в FSMContext
+
+    await callback.answer()
+    await callback.message.answer("Введите промокод:")
+    await state.set_state(PromoCodeState.enter_promo_code)
+
+
+@user_private.message(PromoCodeState.enter_promo_code)
+async def process_promo_code(message: Message, state: FSMContext):
+    promo_code = message.text.strip()
+
+    # Получаем язык из FSMContext
+    user_data = await state.get_data()
+    language_code = user_data.get("language_code", "ru")  # Если нет в state, ставим 'ru' по умолчанию
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    # Проверяем промокод
+    valid_promo_code = await orm_get_promo_code_by_text(promo_code)
+    if valid_promo_code:
+        await orm_activate_promo_code_for_user(message.from_user.id, valid_promo_code.id)
+        await message.answer(f"Промокод '{promo_code}' успешно активирован!")
+    else:
+        await message.answer("Неверный промокод. Пожалуйста, попробуйте еще раз.")
+
+    await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+    await state.clear()
+
+
+@user_private.callback_query(F.data == 'my_orders')
+async def user_my_orders(callback: CallbackQuery):
+    user = await orm_get_user_by_tg_id(callback.from_user.id)
+    language_code = await orm_get_user_language(callback.from_user.id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+
+    await callback.message.delete()
+
+    # Получаем заказы пользователя из таблицы ExcelOrder, только со статусом "pending"
+    excel_orders = await orm_get_excel_orders_by_user_phone(user.phone_number)
+
+    # Фильтруем заказы со статусом "pending"
+    pending_orders = [order for order in excel_orders if order.status == "pending"]
+
+    if not pending_orders:
+        await callback.answer(messages['no_orders'])
+        return
+
+    grouped_orders = {}
+
+    for order in pending_orders:
+        if order.order_id not in grouped_orders:
+            grouped_orders[order.order_id] = {
+                "items": [],
+                "total_cost": Decimal(0),
+                "promo_code": order.promo_code_name,
+                "promo_discount": Decimal(order.promo_discount_percentage or 0),
+                "customer_name": order.customer_name,
+                "username": order.username,
+                "phone_number": order.phone_number,
+            }
+
+        grouped_orders[order.order_id]["items"].append({
+            # "category": order.category_name_ru,
+            "product_name": order.product_name_ru,
+            "quantity": order.product_quantity,
+            "initial_cost": Decimal(order.initial_cost),
+            "total_cost": Decimal(order.total_cost)
+        })
+        grouped_orders[order.order_id]["total_cost"] += Decimal(order.total_cost)
+
+    # Получаем местоположение пользователя
+    user_location = await orm_get_user_location(user.id)
+    location_text = ""
+    if user_location:
+        latitude, longitude = user_location
+        location_name = await get_address_from_coordinates(latitude, longitude)
+        location_text = f"📍 {messages['location']}: {location_name}\n"
+
+    order_texts = []
+
+    for order_id, order_data in grouped_orders.items():
+        text = f"{messages['order_id']}: {order_id}\n\n"
+
+        for item in order_data["items"]:
+            text += (
+                # f"{messages['category']}: {item['category']}\n"
+                f"{messages['product_name']}: {item['product_name']}\n"
+                f"{messages['quantity']}: {item['quantity']}\n"
+                f"{messages['total_cost']}: {locale.format_string('%d', item['total_cost'], grouping=True)} {messages['currency']}\n\n"
+            )
+
+        total_cost = order_data["total_cost"]
+        discount_text = ""
+
+        if order_data["promo_discount"] > 0:
+            discounted_total_cost = total_cost * (Decimal(1) - order_data["promo_discount"] / Decimal(100))
+            formatted_discounted_total = locale.format_string('%d', discounted_total_cost, grouping=True)
+            discount_text = f"{messages['promo_applied']}: {order_data['promo_code']} (-{order_data['promo_discount']}%)\n💸 {messages['discounted_price']}: {formatted_discounted_total} {messages['currency']}\n"
+
+        formatted_total_cost = locale.format_string('%d', total_cost, grouping=True)
+        text += f"💰 {messages['total_order_cost']}: {formatted_total_cost} {messages['currency']}\n"
+
+        if discount_text:
+            text += discount_text
+
+        text += (
+            f"👤 {messages['customer_name']}: {order_data['customer_name']}\n"
+            f"🎭 {messages['username']}: @{order_data['username'] if order_data['username'] else 'N/A'}\n"
+            f"☎️ {messages['phone_number']}: {order_data['phone_number']}\n"
+        )
+
+        if location_text:
+            text += location_text  # Добавляем локацию в текст заказа
+
+        order_texts.append(text)
+
+    for order_text in order_texts:
+        await callback.message.answer(order_text)
+
+    await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
+    await callback.answer()
+
+
+def calculate_discounted_price(price: float, discount: float) -> float:
+    return price * (1 - discount / 100)

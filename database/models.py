@@ -1,6 +1,7 @@
 import random
 import string
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DECIMAL, TIMESTAMP, Text, BigInteger, Numeric
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DECIMAL, TIMESTAMP, Text, BigInteger, Numeric, \
+    Boolean, DateTime
 from sqlalchemy.orm import relationship, declared_attr
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -43,6 +44,9 @@ class User(Base):
 
     orders = relationship("Order", back_populates="user")
 
+    active_promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=True)  # New column
+    active_promo_code = relationship("PromoCode", foreign_keys=[active_promo_code_id])
+
 class Category(Base):
     __tablename__ = 'categories'
 
@@ -59,7 +63,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     price = Column(DECIMAL(10, 2))
     category_id = Column(Integer, ForeignKey("categories.id"))
-    image_url = Column(String(255), nullable=False)
+    video_url = Column(String(255), nullable=False)
 
     name_ru = Column(String(255), nullable=False)
     name_uz = Column(String(255), nullable=False)
@@ -68,7 +72,7 @@ class Product(Base):
 
     category = relationship("Category", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
-
+    promo_codes = relationship("PromoCode", back_populates="product")  # New relationship
 
 class Order(Base):
     __tablename__ = "orders"
@@ -102,9 +106,24 @@ class ExcelOrder(Base):
     category_name_ru = Column(String(255), nullable=False)
     product_name_ru = Column(String(255), nullable=False)
     product_quantity = Column(Integer, nullable=False)
-    total_cost = Column(Float, nullable=False)
+    initial_cost = Column(Float, nullable=False)  # New column for the initial cost
+    promo_code_name = Column(String(50), nullable=True)  # New column for promo code name
+    promo_discount_percentage = Column(Float, nullable=True)  # New column for discount percentage
+    total_cost = Column(Float, nullable=False)  # The final cost after applying the discount
     customer_name = Column(String(255), nullable=False)
     username = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=False)
     status = Column(String(20), nullable=False, default="pending")  # Default status set to 'pending'
 
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, nullable=False)  # Promo code text
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)  # Optional product ID
+    discount = Column(Float, nullable=False)  # Discount percentage
+    is_global = Column(Boolean, default=False)  # Whether the promo code applies to all products
+    expiry_date = Column(DateTime, nullable=True)  # Expiry date (optional)
+
+    product = relationship("Product", back_populates="promo_codes")

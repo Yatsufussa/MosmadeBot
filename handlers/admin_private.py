@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from aiogram.utils.markdown import hbold
 
@@ -21,7 +22,7 @@ from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_update_product_description_uz, orm_update_product_description_ru, orm_update_product_name_ru, \
     orm_update_product_name_uz, orm_get_all_user_ids, orm_get_all_excel_orders, orm_delete_all_excel_orders, \
     orm_get_user_by_tg_id, update_excel_order_status_to_cancelled, orm_get_order_by_id, orm_delete_order_by_id, \
-    update_order_status_to_finished
+    update_order_status_to_finished, orm_add_promocode, orm_product_exists, orm_promocode_exists, orm_delete_promocode
 from language_dictionary.language import GENDER_MAPPING, MESSAGES
 
 admin_router = Router()
@@ -52,14 +53,12 @@ class DeleteCategory(StatesGroup):
 
 # region ADMINS PRODUCT MANIPULATION STATES
 class AddProduct(StatesGroup):
-    add_category = State()
     add_name_ru = State()
     add_name_uz = State()
     add_description_ru = State()
     add_description_uz = State()
     add_price = State()
-    add_photo = State()
-    add_more_photos = State()
+    add_video = State()  # Only video state is needed
 
 
 class ChangeProduct(StatesGroup):
@@ -74,7 +73,11 @@ class ChangeProduct(StatesGroup):
 class DeleteProduct(StatesGroup):
     delete_product = State()
 
-
+class AddPromoCode(StatesGroup):
+    enter_promo_code = State()  # Step 1: Enter the promo code text
+    enter_product_id = State()  # Step 2: Enter the product ID (optional)
+    enter_discount = State()   # Step 3: Enter the discount percentage
+    enter_expiry_date = State()  # Step 4: Enter the expiry date (optional)
 # endregion
 
 
@@ -82,19 +85,19 @@ class DeleteProduct(StatesGroup):
 @admin_router.message(Command("admin"))
 async def admin_features(message: types.Message):
     await message.answer(
-        "👨‍💼 *Admin Commands Guide*:\n\n"
+        "👨‍💼 <b>Admin Commands Guide</b>:\n\n"
         "📌 /admin - Open Admin Menu\n"
         "🛑 /stop - Stop the process\n"
         "📢 /newsletter [text] - Send a broadcast message\n"
         "✅ /OrderFinish [Order ID] - Mark order as delivered\n"
         "❌ /OrderCancelation [Order ID] - Cancel and delete an order\n"
         "📍 /GetLocation [Order ID] - Get the location of an order\n"
-        "📜 /getallorders - Download all orders as an Excel document\n\n\n"
-        "⚠️ /ExcelOrdersClear - *WARNING:* Deletes all Excel order records! (Recommended to download first via /getallorders)\n",
+        "📜 /getallorders - Download all orders as an Excel document\n"
+        "🎁 /add_promocode - Add a new promo code\n\n"
+        "⚠️ /ExcelOrdersClear - <b>WARNING:</b> Deletes all Excel order records! (Recommended to download first via /getallorders)\n",
         reply_markup=kb.admin_main,
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
-
 
 @admin_router.message(Command("stop"))
 async def admin_stop(message: types.Message):
@@ -497,14 +500,21 @@ async def admin_add_product_description(message: Message, state=FSMContext):
 
 
 @admin_router.message(AddProduct.add_price)
-async def admin_add_product_price(message: Message, state=FSMContext):
+async def admin_add_product_price(message: Message, state: FSMContext):
     await state.update_data(price=message.text)
-    await message.answer('Отправьте фотографию Товара', reply_markup=ReplyKeyboardRemove())
-    await state.set_state(AddProduct.add_photo)
+    await message.answer('Отправьте видео товара', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AddProduct.add_video)
 
 
-@admin_router.message(AddProduct.add_photo, F.photo)
-async def admin_add_product_photo(message: Message, state: FSMContext):
+@admin_router.message(AddProduct.add_video, F.video)
+async def admin_add_product_video(message: Message, state: FSMContext):
+    video = message.video.file_id if message.video else None
+    await state.update_data(video=video)
+
+    # Save the product with the video
+    await save_product_and_clear_state(message, state)
+
+async def save_product_and_clear_state(message: Message, state: FSMContext):
     try:
         data = await state.get_data()
         category_id = data.get('category_id')
@@ -513,12 +523,22 @@ async def admin_add_product_photo(message: Message, state: FSMContext):
         description_ru = data.get('description_ru')
         description_uz = data.get('description_uz')
         price = float(data.get('price')) if 'price' in data else None
-        photo = message.photo[-1].file_id if message.photo else None
+        video = data.get('video')  # Get the video file_id
 
-        if category_id and name_ru and name_uz and description_ru and description_uz and price and photo:
-            await orm_add_product(name_ru, name_uz, description_ru, description_uz, price, category_id, photo)
-            await message.answer(f'Товар {name_ru} успешно добавлен в категорию №{category_id}',
-                                 reply_markup=kb.admin_product)
+        if category_id and name_ru and name_uz and description_ru and description_uz and price and video:
+            await orm_add_product(
+                name_ru=name_ru,
+                name_uz=name_uz,
+                description_ru=description_ru,
+                description_uz=description_uz,
+                price=price,
+                category_id=category_id,
+                video_url=video  # Pass the video file_id
+            )
+            await message.answer(
+                f'Товар {name_ru} успешно добавлен в категорию №{category_id}',
+                reply_markup=kb.admin_product
+            )
             await state.clear()
         else:
             await message.answer('Не удалось добавить товар. Пожалуйста, заполните все поля правильно.')
@@ -890,62 +910,64 @@ async def broadcast_message(message: Message, bot: Bot):
 
 
 # endregion
+
+
 @admin_router.message(Command('getallorders'))
-async def send_all_orders(message: types.Message):
-    orders = await orm_get_all_excel_orders()
+async def send_all_orders(message: types.Message, session: AsyncSession):
+    orders = await orm_get_all_excel_orders()  # Ensure it retrieves all necessary fields
 
     if not orders:
         await message.reply("No orders found.")
         return
 
-    # Create a DataFrame and populate it with the orders data
     data = {
         "Order ID": [],
         "Category Name (RU)": [],
         "Product Name (RU)": [],
         "Product Quantity": [],
+        "Initial Cost": [],
+        "Promo Code": [],
+        "Discount %": [],
         "Total Cost": [],
         "Customer Name": [],
         "Username": [],
         "Phone Number": [],
         "Orders Time": [],
-        "Location": [],  # Combined Latitude, Longitude
-        "Status": []  # Order status
+        "Location": [],
+        "Status": []
     }
 
     for order in orders:
-        data["Order ID"].append(order["order_id"])
-        data["Category Name (RU)"].append(order["category_name_ru"])
-        data["Product Name (RU)"].append(order["product_name_ru"])
-        data["Product Quantity"].append(order["product_quantity"])
-        data["Total Cost"].append(order["total_cost"])
-        data["Customer Name"].append(order["customer_name"])
-        data["Username"].append(order["username"])
-        data["Phone Number"].append(order["phone_number"])
-        data["Orders Time"].append(order["order_created_at"])
+        data["Order ID"].append(order.get("order_id"))
+        data["Category Name (RU)"].append(order.get("category_name_ru", "N/A"))
+        data["Product Name (RU)"].append(order.get("product_name_ru", "N/A"))
+        data["Product Quantity"].append(order.get("product_quantity", 0))
 
-        # Combine Latitude and Longitude into a single column
-        location = f"{order['latitude']}, {order['longitude']}" if order['latitude'] and order['longitude'] else "Not available"
+        # Use .get() to prevent KeyError
+        data["Initial Cost"].append(order.get("initial_cost", 0.0))
+        data["Promo Code"].append(order.get("promo_code_name", "N/A"))
+        data["Discount %"].append(order.get("promo_discount_percentage", 0.0))
+        data["Total Cost"].append(order.get("total_cost", 0.0))
+
+        data["Customer Name"].append(order.get("customer_name", "N/A"))
+        data["Username"].append(order.get("username", "N/A"))
+        data["Phone Number"].append(order.get("phone_number", "N/A"))
+        data["Orders Time"].append(order.get("order_created_at", "N/A"))
+
+        location = f"{order.get('latitude', 'N/A')}, {order.get('longitude', 'N/A')}"
         data["Location"].append(location)
 
-        # Add Status column
-        status = order.get("status", "Unknown")  # Assuming the status field is present
-        data["Status"].append(status)
+        data["Status"].append(order.get("status", "pending"))
 
     df = pd.DataFrame(data)
 
-    # Create a temporary file and save the DataFrame to an Excel file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         file_path = tmp.name
         df.to_excel(file_path, index=False)
 
-    # Create FSInputFile instance
     file_input = FSInputFile(file_path)
-
-    # Send the file
     await message.reply_document(file_input)
 
-    # Remove the temporary file
     os.remove(file_path)
 
 
@@ -1081,3 +1103,115 @@ async def get_location(message: Message):
 
     await message.answer(f"Местоположение заказа {hbold(order_id)} отправлено в группу.")
 
+
+@admin_router.message(Command("add_promocode"))
+async def start_add_promocode(message: Message, state: FSMContext):
+    await message.answer("Введите текст промокода:")
+    await state.set_state(AddPromoCode.enter_promo_code)
+
+
+@admin_router.message(AddPromoCode.enter_promo_code)
+async def process_promo_code_text(message: Message, state: FSMContext):
+    promo_code = message.text.strip()
+
+    # Validate the promo code format
+    if not promo_code.isalnum():
+        await message.answer("Промокод должен содержать только буквы и цифры.")
+        return
+
+    # Check if the promo code already exists
+    if await orm_promocode_exists(promo_code):
+        await message.answer("Промокод с таким текстом уже существует.")
+        return
+
+    await state.update_data(promo_code=promo_code)
+    await message.answer("Введите ID товара, для которого действует промокод (или 'все' для всех товаров):")
+    await state.set_state(AddPromoCode.enter_product_id)
+
+
+@admin_router.message(AddPromoCode.enter_product_id)
+async def process_product_id(message: Message, state: FSMContext):
+    user_input = message.text.strip()
+
+    if user_input.lower() == "все":
+        await state.update_data(product_id=None, is_global=True)
+        await message.answer("Введите размер скидки в процентах (например, 10 для 10%):")
+        await state.set_state(AddPromoCode.enter_discount)
+    else:
+        try:
+            product_id = int(user_input)  # Convert the product ID to an integer
+
+            # Check if the product exists
+            if not await orm_product_exists(product_id):
+                await message.answer(f"Товар с ID {product_id} не найден.")
+                return
+
+            await state.update_data(product_id=product_id, is_global=False)
+            await message.answer("Введите размер скидки в процентах (например, 10 для 10%):")
+            await state.set_state(AddPromoCode.enter_discount)
+        except ValueError:
+            await message.answer("Неверный формат ID товара. Введите числовой идентификатор или 'все'.")
+
+
+@admin_router.message(AddPromoCode.enter_discount)
+async def process_discount(message: Message, state: FSMContext):
+    try:
+        discount = float(message.text)  # Convert the discount to a float
+        if discount <= 0 or discount > 100:
+            await message.answer("Скидка должна быть больше 0% и не больше 100%.")
+            return
+
+        await state.update_data(discount=discount)
+        await message.answer("Введите срок действия промокода в формате ГГГГ-ММ-ДД (или 'нет' для отсутствия срока):")
+        await state.set_state(AddPromoCode.enter_expiry_date)
+    except ValueError:
+        await message.answer("Неверный формат скидки. Введите число (например, 10 для 10%).")
+
+
+@admin_router.message(AddPromoCode.enter_expiry_date)
+async def process_expiry_date(message: Message, state: FSMContext):
+    user_input = message.text.strip()
+
+    if user_input.lower() == "нет":
+        expiry_date = None
+    else:
+        try:
+            expiry_date = datetime.strptime(user_input, "%Y-%m-%d")
+        except ValueError:
+            await message.answer("Неверный формат даты. Введите дату в формате ГГГГ-ММ-ДД или 'нет'.")
+            return
+
+    # Get the data from the state
+    data = await state.get_data()
+    promo_code = data.get("promo_code")
+    product_id = data.get("product_id")
+    discount = data.get("discount")
+    is_global = data.get("is_global", False)
+
+    # Save the promo code in the database
+    await orm_add_promocode(promo_code, product_id, discount, is_global, expiry_date)
+
+    await message.answer(f"Промокод '{promo_code}' успешно добавлен.")
+    await state.clear()  # Clear the state
+
+
+
+@admin_router.message(Command("promocodedelete"))
+async def delete_promocode(message: Message):
+    args = message.text.split()[1:]  # Extract arguments after the command
+
+    if not args:
+        await message.answer("Пожалуйста, укажите ID промокода для удаления.")
+        return
+
+    try:
+        promo_code_id = int(args[0])  # Convert the promo code ID to an integer
+    except ValueError:
+        await message.answer("Неверный формат ID промокода. Введите числовой идентификатор.")
+        return
+
+    # Delete the promo code
+    if await orm_delete_promocode(promo_code_id):
+        await message.answer(f"Промокод с ID {promo_code_id} успешно удален.")
+    else:
+        await message.answer(f"Промокод с ID {promo_code_id} не найден.")

@@ -172,6 +172,10 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="REF ссылка", callback_data='refer')
             ],
             [
+                InlineKeyboardButton(text="🎁 Промокод", callback_data='promo_code'),
+                InlineKeyboardButton(text="📦 Мои заказы", callback_data='my_orders')
+            ],
+            [
                 InlineKeyboardButton(text="⚙️ Настройки", callback_data='settings')
             ]
         ]
@@ -184,6 +188,10 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🛒 Savat", callback_data='basket'),
                 InlineKeyboardButton(text="REF ssilkam", callback_data='refer')
+            ],
+            [
+                InlineKeyboardButton(text="🎁 Promokod", callback_data='promo_code'),
+                InlineKeyboardButton(text="📦 Mening buyurtmalarim", callback_data='my_orders')
             ],
             [
                 InlineKeyboardButton(text="⚙️ Sozlamalar", callback_data='settings')
@@ -199,13 +207,13 @@ def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
     if language_code == 'ru':
         buttons = [
             [InlineKeyboardButton(text='💰Купить', callback_data='buy_product'),
-             InlineKeyboardButton(text='🛍Добавить еще', callback_data='private_add_product')],
+             InlineKeyboardButton(text='🛍Добавить еще', callback_data='catalog')],
             [InlineKeyboardButton(text='🗑Очистить Корзину', callback_data='clean_basket')],
         ]
     elif language_code == 'uz':
         buttons = [
             [InlineKeyboardButton(text='💰Sotib olish', callback_data='buy_product'),
-             InlineKeyboardButton(text="🛍Qo'shimcha qo'shish", callback_data='private_add_product')],
+             InlineKeyboardButton(text="🛍Qo'shimcha qo'shish", callback_data='catalog')],
             [InlineKeyboardButton(text='🗑Savatni tozalash', callback_data='clean_basket')],
         ]
     else:
@@ -307,7 +315,7 @@ def create_product_buttons(quantity: int, language_code: str = 'ru') -> InlineKe
     minus = InlineKeyboardButton(text="➖", callback_data='minus')
     add_to_cart = InlineKeyboardButton(text=messages['add_to_basket'], callback_data='dobavit_v_korzinu')
     show_cart = InlineKeyboardButton(text=messages['show_basket'], callback_data='basket')
-    exit_button = InlineKeyboardButton(text=messages['back'], callback_data='catalog')
+    exit_button = InlineKeyboardButton(text=messages['back'], callback_data='to_main')
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [minus, summa, plus],

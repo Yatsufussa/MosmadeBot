@@ -63,6 +63,15 @@ MESSAGES_RU = {
     'current_phone': "📞 Ваш текущий номер телефона",
     'location': "📍 Ваше текущее местоположение",
     'no_location': "📍 Местоположение не установлено",
+    'original_price': 'Цена',
+    'discounted_price': 'Цена со скидкой',
+    'promo_applied': 'Промокод применен',
+    'discounted_cost': 'Цена со скидкой',
+    'initial_cost': 'Цена',
+    'no_orders': 'У вас нет заказов в ожидании',
+    'order_items': 'Товар',
+    'quantity_unit': 'Количество',
+    'phone_number': 'Ваш номер телефона',
 }
 
 
@@ -125,8 +134,15 @@ MESSAGES_UZ = {
     'current_phone': "📞 Sizning joriy telefon raqamingiz",
     'location': "📍 Sizning joriy joylashuvingiz",
     'no_location': "📍 Joylashuv o'rnatilmagan",
-
-
+    'original_price': 'Boshlang\'ich narxi',
+    'discounted_price': 'Chegirma bilan narxi',
+    'promo_applied': 'Промокод применен',
+    'discounted_cost': 'Chegirma bilan narx',
+    'initial_cost': 'Boshlang\'ich narxi',
+    'no_orders': 'Hali zakaz qilmadingiz',
+    'order_items': 'Tovar: ',
+    'quantity_unit': 'Soni: ',
+    'phone_number': 'Telefon raqamingiz: ',
 
 }
 GENDER_MAPPING = {

@@ -1,10 +1,13 @@
+from datetime import datetime
+from decimal import Decimal
+
 from sqlalchemy import func, delete, update
 from sqlalchemy.orm import joinedload
 
 from database.engine import SessionMaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import Category, Product, User, Order, OrderItem, ExcelOrder
+from database.models import Category, Product, User, Order, OrderItem, ExcelOrder, PromoCode
 import uuid
 from sqlalchemy.future import select
 
@@ -136,18 +139,18 @@ async def orm_get_product_by_id(item_id: int):
 
 
 async def orm_add_product(name_ru: str, name_uz: str, description_ru: str, description_uz: str, price: float,
-                          category_id: int, image_url: str):
+                          category_id: int, video_url: str):
     async with SessionMaker() as session:
-        new_product = Product(
+        product = Product(
             name_ru=name_ru,
             name_uz=name_uz,
             description_ru=description_ru,
             description_uz=description_uz,
             price=price,
             category_id=category_id,
-            image_url=image_url
+            video_url=video_url  # Save the video URL
         )
-        session.add(new_product)
+        session.add(product)
         await session.commit()
 
 
@@ -407,58 +410,64 @@ async def orm_update_user(user: User):
         raise
 
 
-async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, total_cost, customer_name,
-                               username, phone_number):
+async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, initial_cost, promo_code_name, promo_discount_percentage, total_cost, customer_name, username, phone_number):
     async with SessionMaker() as session:
-        async with session.begin():
-            new_order = ExcelOrder(
-                order_id=order_id,
-                category_name_ru=category_name_ru,
-                product_name_ru=product_name_ru,
-                product_quantity=product_quantity,
-                total_cost=total_cost,
-                customer_name=customer_name,
-                username=username,
-                phone_number=phone_number
-            )
-            session.add(new_order)
-            await session.commit()
+        new_excel_order = ExcelOrder(
+            order_id=order_id,
+            category_name_ru=category_name_ru,
+            product_name_ru=product_name_ru,
+            product_quantity=product_quantity,
+            initial_cost=initial_cost,
+            promo_code_name=promo_code_name,
+            promo_discount_percentage=promo_discount_percentage,
+            total_cost=total_cost,
+            customer_name=customer_name,
+            username=username,
+            phone_number=phone_number
+        )
+        session.add(new_excel_order)
+        await session.commit()
+
 
 
 async def orm_get_all_excel_orders():
     async with SessionMaker() as session:
         async with session.begin():
-            # Join ExcelOrder with User table to get user location data
             result = await session.execute(
                 select(
                     ExcelOrder.order_id,
                     ExcelOrder.category_name_ru,
                     ExcelOrder.product_name_ru,
                     ExcelOrder.product_quantity,
+                    ExcelOrder.initial_cost,  # ✅ Added
+                    ExcelOrder.promo_code_name,  # ✅ Added
+                    ExcelOrder.promo_discount_percentage,  # ✅ Added
                     ExcelOrder.total_cost,
                     ExcelOrder.customer_name,
                     ExcelOrder.username,
                     ExcelOrder.phone_number,
-                    ExcelOrder.status,  # Added status
+                    ExcelOrder.status,
                     ExcelOrder.created_at,
                     User.latitude,
                     User.longitude
-                ).join(User, ExcelOrder.phone_number == User.phone_number)  # Join on phone number
+                ).join(User, ExcelOrder.phone_number == User.phone_number)
             )
             orders = result.fetchall()
 
-            # Format results into a list of dictionaries
             orders_list = [
                 {
                     "order_id": order.order_id,
                     "category_name_ru": order.category_name_ru,
                     "product_name_ru": order.product_name_ru,
                     "product_quantity": order.product_quantity,
+                    "initial_cost": order.initial_cost if order.initial_cost else 0.0,  # ✅ Handle None
+                    "promo_code_name": order.promo_code_name if order.promo_code_name else "N/A",  # ✅ Handle None
+                    "promo_discount_percentage": order.promo_discount_percentage if order.promo_discount_percentage else 0.0,  # ✅ Handle None
                     "total_cost": order.total_cost,
                     "customer_name": order.customer_name,
-                    "username": order.username,
+                    "username": order.username if order.username else "N/A",
                     "phone_number": order.phone_number,
-                    "status": order.status if order.status else "pending",  # Handle status if it's None
+                    "status": order.status if order.status else "pending",
                     "order_created_at": order.created_at,
                     "latitude": order.latitude,
                     "longitude": order.longitude
@@ -626,3 +635,121 @@ async def orm_get_order_by_id(order_id):
         return await session.get(
             Order, order_id, options=[joinedload(Order.user)]
         )
+
+
+async def orm_promocode_exists(promo_code: str) -> bool:
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(PromoCode).where(PromoCode.code == promo_code)
+        )
+        return result.scalar() is not None
+
+
+async def orm_product_exists(product_id: int) -> bool:
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(Product).where(Product.id == product_id))
+        return result.scalar() is not None
+
+
+async def orm_add_promocode(promo_code: str, product_id: int | None, discount: float, is_global: bool = False,
+                            expiry_date: datetime | None = None):
+    async with SessionMaker() as session:
+        new_promocode = PromoCode(
+            code=promo_code,
+            product_id=product_id,
+            discount=discount,
+            is_global=is_global,
+            expiry_date=expiry_date
+        )
+        session.add(new_promocode)
+        await session.commit()
+
+
+async def orm_get_all_promocodes():
+    async with SessionMaker() as session:
+        result = await session.execute(select(PromoCode))
+        return result.scalars().all()
+
+
+async def orm_delete_promocode(promo_code_id: int):
+    async with SessionMaker() as session:
+        async with session.begin():
+            # First, update users who are using this promo code
+            await session.execute(
+                update(User).where(User.active_promo_code_id == promo_code_id).values(active_promo_code_id=None)
+            )
+
+            # Fetch the promo code
+            result = await session.execute(
+                select(PromoCode).where(PromoCode.id == promo_code_id)
+            )
+            promo_code = result.scalar()
+
+            if promo_code:
+                await session.delete(promo_code)
+                await session.commit()
+                return True
+            return False
+
+
+
+async def orm_get_promo_code_by_text(promo_code: str):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(PromoCode).where(PromoCode.code == promo_code)
+        )
+        return result.scalar_one_or_none()
+
+
+async def orm_activate_promo_code_for_user(user_id: int, promo_code_id: int):
+    async with SessionMaker() as session:
+        # Fetch the user by their Telegram ID
+        user = await session.scalar(
+            select(User).where(User.tg_id == user_id)
+        )
+
+        if user:
+            # Update the user's active promo code
+            user.active_promo_code_id = promo_code_id
+            await session.commit()
+            return True
+        return False
+
+async def orm_get_promo_code_by_id(promo_code_id: int):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(PromoCode).where(PromoCode.id == promo_code_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def orm_get_orders_by_user_id(user_id: int):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(Order)
+            .where(Order.user_id == user_id)
+            .options(joinedload(Order.user))  # Load related user data
+            .order_by(Order.created_at.desc())  # Order by most recent first
+        )
+        return result.scalars().all()
+
+
+async def orm_get_promo_discount(promo_code: str) -> Decimal:
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(PromoCode.discount)
+            .where(PromoCode.code == promo_code)
+        )
+        discount = result.scalar()
+        return Decimal(discount) if discount else Decimal(0)
+
+
+
+async def orm_get_excel_orders_by_user_phone(phone_number: str):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(ExcelOrder)
+            .where(ExcelOrder.phone_number == phone_number, ExcelOrder.status == "pending")
+        )
+        return result.scalars().all()
