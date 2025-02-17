@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from database.engine import SessionMaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import Category, Product, User, Order, OrderItem, ExcelOrder, PromoCode
+from database.models import Category, Product, User, Order, OrderItem, ExcelOrder, PromoCode, BonusProduct, UserBonus
 import uuid
 from sqlalchemy.future import select
 
@@ -556,17 +556,13 @@ async def orm_get_referred_users_count(user_id: int):
     return referred_users_count
 
 
-async def orm_get_referred_users_with_orders_count(user_id: int):
-    # Query to count the number of referred users who have at least one order
-    async with SessionMaker() as session:
-        result = await session.execute(
-            select(User).join(Order, Order.user_id == User.id)  # Join User with Order
-            .filter(User.referred_by == user_id)  # Filter by the current user
-            .distinct()  # Ensure unique users
-        )
-        referred_users_with_orders_count = len(
-            result.scalars().all())  # Count the number of referred users who have orders
-    return referred_users_with_orders_count
+
+
+
+
+
+
+
 
 
 async def orm_delete_order_by_id(order_id: int):
@@ -753,3 +749,137 @@ async def orm_get_excel_orders_by_user_phone(phone_number: str):
             .where(ExcelOrder.phone_number == phone_number, ExcelOrder.status == "pending")
         )
         return result.scalars().all()
+
+
+
+
+
+async def orm_get_referred_users_with_orders_count(user_id: int):
+    # Query to count the number of referred users who have at least one order
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(User).join(Order, Order.user_id == User.id)  # Join User with Order
+            .filter(User.referred_by == user_id)  # Filter by the current user
+            .distinct()  # Ensure unique users
+        )
+        referred_users_with_orders_count = len(
+            result.scalars().all())  # Count the number of referred users who have orders
+    return referred_users_with_orders_count
+
+
+async def orm_get_bonus_products_by_referral_count(referral_count: int):
+    """
+    Получает список бонусных товаров, доступных пользователю с заданным количеством рефералов.
+    """
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(BonusProduct).where(BonusProduct.required_referrals <= referral_count, BonusProduct.active == True)
+        )
+        return result.scalars().all()
+
+
+async def orm_add_bonus_to_user(user_id: int, bonus_product_id: int):
+    """
+    Добавляет пользователю бонусный продукт.
+    """
+    async with SessionMaker() as session:
+        new_bonus = UserBonus(user_id=user_id, bonus_product_id=bonus_product_id)
+        session.add(new_bonus)
+        await session.commit()
+
+
+async def orm_check_user_bonus(user_id: int, bonus_product_id: int):
+    """
+    Проверяет, получал ли пользователь этот бонус.
+    """
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(UserBonus).where(
+                UserBonus.user_id == user_id,
+                UserBonus.bonus_product_id == bonus_product_id,
+                UserBonus.is_used == False
+            )
+        )
+        return result.scalars().first()
+
+
+async def orm_add_bonus_to_order(order_id: int, bonus_products: list):
+    async with SessionMaker() as session:
+        for bonus_product in bonus_products:
+            order_item = OrderItem(
+                order_id=order_id,
+                product_id=bonus_product.id,  # Assuming bonus_products contains id of product
+                quantity=1,  # Bonus products are added in quantity 1
+                total_cost=0  # Bonus product is free
+            )
+            session.add(order_item)
+        await session.commit()
+
+
+async def orm_add_bonus_product(name_ru: str, name_uz: str, description_ru: str, description_uz: str, image_url: str, required_referrals: int):
+    async with SessionMaker() as session:
+        new_bonus_product = BonusProduct(
+            name_ru=name_ru,
+            name_uz=name_uz,
+            description_ru=description_ru,
+            description_uz=description_uz,
+            image_url=image_url,
+            required_referrals=required_referrals
+        )
+        session.add(new_bonus_product)
+        await session.commit()
+
+
+async def orm_delete_bonus_product(bonus_id: int) -> bool:
+    """
+    Deletes a bonus product from the database by its ID.
+
+    :param bonus_id: ID of the bonus product to delete.
+    :return: True if the bonus product was deleted, False if it was not found.
+    """
+    async with SessionMaker() as session:
+        result = await session.execute(
+            delete(BonusProduct)
+            .where(BonusProduct.id == bonus_id)
+        )
+        await session.commit()
+        return result.rowcount > 0  # Returns True if a row was deleted
+
+
+
+async def orm_get_referred_users_with_orders_count(user_id: int):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(User.id)
+            .join(Order, Order.user_id == User.id)
+            .filter(User.referred_by == user_id)
+            .distinct()
+        )
+        return len(result.scalars().all())
+
+async def orm_get_bonus_products_by_referral_count(referral_count: int):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(BonusProduct)
+            .where(BonusProduct.required_referrals <= referral_count, BonusProduct.active == True)
+            .order_by(BonusProduct.required_referrals.desc())
+        )
+        return result.scalars().first()
+
+async def orm_add_bonus_to_user(user_id: int, bonus_product_id: int):
+    async with SessionMaker() as session:
+        existing_bonus = await session.execute(
+            select(UserBonus).filter(UserBonus.user_id == user_id, UserBonus.bonus_product_id == bonus_product_id)
+        )
+        if not existing_bonus.scalars().first():
+            new_bonus = UserBonus(user_id=user_id, bonus_product_id=bonus_product_id)
+            session.add(new_bonus)
+            await session.commit()
+            return {
+                "success": True,
+                "message": {
+                    "ru": f"Поздравляем! Вы получили бонус!",
+                    "uz": f"Tabriklaymiz! Siz bonus oldingiz!"
+                }
+            }
+    return {"success": False, "message": {"ru": "Бонус не найден", "uz": "Bonus topilmadi"}}

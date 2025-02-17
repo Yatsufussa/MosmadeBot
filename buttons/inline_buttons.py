@@ -169,7 +169,7 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🛒 Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="REF ссылка", callback_data='refer')
+                InlineKeyboardButton(text="Реферальная ссылка", callback_data='refer')
             ],
             [
                 InlineKeyboardButton(text="🎁 Промокод", callback_data='promo_code'),
@@ -187,7 +187,7 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🛒 Savat", callback_data='basket'),
-                InlineKeyboardButton(text="REF ssilkam", callback_data='refer')
+                InlineKeyboardButton(text="Referall ssilkam", callback_data='refer')
             ],
             [
                 InlineKeyboardButton(text="🎁 Promokod", callback_data='promo_code'),

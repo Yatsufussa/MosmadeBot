@@ -22,7 +22,8 @@ from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create
     orm_get_referred_users_count, orm_get_referred_users_with_orders_count, orm_get_user_location, \
     orm_update_user_location, orm_update_user_phone, orm_get_promo_code_by_text, orm_activate_promo_code_for_user, \
     orm_get_promo_code_by_id, orm_get_orders_by_user_id, \
-    orm_get_excel_orders_by_user_phone
+    orm_get_excel_orders_by_user_phone, orm_add_bonus_to_order, orm_get_bonus_products_by_referral_count, \
+    orm_add_bonus_to_user
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
@@ -68,7 +69,7 @@ async def cmd_start(message: CallbackQuery, state: FSMContext):
 
     if user:
         language_code = user.language
-        await state.update_data(language=language_code)
+        await state.update_data(language_code=language_code)  # Use consistent key
         await to_main(message, state, first_time=True)
         return
 
@@ -115,23 +116,22 @@ async def menu_cmd(message: CallbackQuery, state: FSMContext):
 
     if user:
         language_code = user.language
-        await state.update_data(language=language_code)
+        await state.update_data(language_code=language_code)  # Use consistent key
         await to_main(message, state, first_time=True)
     else:
         await orm_create_user_by_tg_id(message.from_user.id)
         await state.set_state(LanguageState.language)
-        await state.update_data(language='ru')
+        await state.update_data(language_code='ru')  # Use consistent key
         await message.answer(
             text=("TAYYOR BOX приветствует вас!\nВыберите язык интерфейса.\n\n"
                   "TAYYOR BOX do'koniga xo'sh kelibsiz\nInterfeys tilini tanlang."),
-            reply_markup=kb.language_selection_keyboard()
-        )
+            reply_markup=kb.language_selection_keyboard())
 
 
 @user_private.callback_query(F.data.startswith('select_language_'))
 async def select_language(callback: CallbackQuery, state: FSMContext):
     language_code = callback.data.split('_')[2]
-    await state.update_data(language=language_code)
+    await state.update_data(language_code=language_code)  # Use consistent key
     await orm_update_user_language(callback.from_user.id, language_code)  # Update user language in DB
     await callback.answer('')
     await callback.message.edit_text(MESSAGES[language_code]['language_selected'],
@@ -140,23 +140,22 @@ async def select_language(callback: CallbackQuery, state: FSMContext):
 
 @user_private.callback_query(F.data == 'to_main')
 async def to_main(event: Union[CallbackQuery, Message], state: FSMContext, first_time=False):
-    if isinstance(event, Message):  # Если передан message вместо callback
+    if isinstance(event, Message):
         message = event
     else:
-        message = event.message  # Это callback, достаём message
+        message = event.message
 
     tg_id = message.from_user.id
 
-    # Сначала пытаемся взять язык из FSMContext
+    # Retrieve language from FSMContext or database
     user_data = await state.get_data()
     language_code = user_data.get("language_code")
 
     if not language_code:
-        # Если в FSMContext нет языка, берем его из БД
-        language_code = await orm_get_user_language(tg_id)
-        await state.update_data(language_code=language_code)  # Сохраняем в FSMContext
+        language_code = await orm_get_user_language(tg_id)  # Retrieve from database
+        await state.update_data(language_code=language_code)  # Update FSMContext
 
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])  # По умолчанию русский
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
     if first_time:
         await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
@@ -680,6 +679,14 @@ def register_handlers_user_private(bot: Bot):
             location_name = await get_address_from_coordinates(latitude, longitude)
             location_text = f"{MESSAGES['ru']['location']}: {location_name}\n"
 
+        # ✅ Check referral count and assign bonus if applicable
+        referral_count = await orm_get_referred_users_with_orders_count(user.id)
+        bonus_product = await orm_get_bonus_products_by_referral_count(referral_count)
+        bonus_text = ""
+        if bonus_product:
+            await orm_add_bonus_to_user(user.id, bonus_product.id)
+            bonus_text = f"🎁 {MESSAGES['ru']['bonus_received']}: {bonus_product.name_ru}\n"
+
         # 📢 Constructing group message
         group_messages = MESSAGES['ru']
         group_text = f"{group_messages['order_id']}: {new_order.id}\n"
@@ -698,14 +705,13 @@ def register_handlers_user_private(bot: Bot):
                 promo_code_name=promo_code.code if promo_code else None,
                 promo_discount_percentage=float(promo_code.discount) if promo_code else None,
                 total_cost=item.total_cost * (Decimal(1) - (
-                            Decimal(promo_code.discount) / Decimal(100))) if promo_code else item.total_cost,
+                        Decimal(promo_code.discount) / Decimal(100))) if promo_code else item.total_cost,
                 customer_name=callback.from_user.first_name,
                 username=callback.from_user.username,
                 phone_number=user.phone_number
             )
 
             group_text += (
-                # f"{group_messages['category']}: {category_name}\n"
                 f"{group_messages['product_name']}: {product_name}\n"
                 f"{group_messages['quantity']}: {item.quantity}\n"
                 f"{group_messages['total_cost']}: {locale.format_string('%d', item.total_cost, grouping=True)} {group_messages['currency']}\n\n"
@@ -716,6 +722,9 @@ def register_handlers_user_private(bot: Bot):
         if promo_code_text:
             group_text += promo_code_text
             group_text += f"💸 {group_messages['discounted_cost']}: {locale.format_string('%d', discounted_cost, grouping=True)} {group_messages['currency']}\n"
+
+        if bonus_text:
+            group_text += f"{bonus_text}\n"
 
         group_text += (
             f"{group_messages['customer_name']}: {callback.from_user.first_name},\n"
@@ -760,6 +769,9 @@ def register_handlers_user_private(bot: Bot):
                 f"{promo_code_text}"
                 f"{group_messages['discounted_cost']}: {locale.format_string('%d', discounted_cost, grouping=True)} {group_messages['currency']}\n"
             )
+
+        if bonus_text:
+            user_confirmation += f"\n{bonus_text}\n"
 
         if location_text:
             user_confirmation += f"\n{location_text}\n"
@@ -1061,7 +1073,7 @@ async def activate_promo_code(callback: CallbackQuery, state: FSMContext):
     await state.update_data(language_code=language_code)  # Сохраняем язык в FSMContext
 
     await callback.answer()
-    await callback.message.answer("Введите промокод:")
+    await callback.message.answer(messages['enter_promo_code'])  # "Введите промокод:"
     await state.set_state(PromoCodeState.enter_promo_code)
 
 
@@ -1078,12 +1090,14 @@ async def process_promo_code(message: Message, state: FSMContext):
     valid_promo_code = await orm_get_promo_code_by_text(promo_code)
     if valid_promo_code:
         await orm_activate_promo_code_for_user(message.from_user.id, valid_promo_code.id)
-        await message.answer(f"Промокод '{promo_code}' успешно активирован!")
+        await message.answer(messages['promo_success'].format(promo_code=promo_code))
+        # Пример: "Промокод '{promo_code}' успешно активирован!"
     else:
-        await message.answer("Неверный промокод. Пожалуйста, попробуйте еще раз.")
+        await message.answer(messages['promo_invalid'])  # "Неверный промокод. Пожалуйста, попробуйте еще раз."
 
     await message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
     await state.clear()
+
 
 
 @user_private.callback_query(F.data == 'my_orders')

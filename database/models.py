@@ -1,5 +1,7 @@
 import random
 import string
+from datetime import datetime
+
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DECIMAL, TIMESTAMP, Text, BigInteger, Numeric, \
     Boolean, DateTime
 from sqlalchemy.orm import relationship, declared_attr
@@ -127,3 +129,28 @@ class PromoCode(Base):
     expiry_date = Column(DateTime, nullable=True)  # Expiry date (optional)
 
     product = relationship("Product", back_populates="promo_codes")
+
+class BonusProduct(Base):
+    __tablename__ = 'bonus_products'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name_ru = Column(String(255), nullable=False)  # Название бонуса на русском
+    name_uz = Column(String(255), nullable=False)  # Название бонуса на узбекском
+    description_ru = Column(Text, nullable=True)  # Описание на русском
+    description_uz = Column(Text, nullable=True)  # Описание на узбекском
+    image_url = Column(String(255), nullable=True)  # Фото бонуса (если нужно)
+    active = Column(Boolean, default=True)  # Активен ли бонус
+    required_referrals = Column(Integer, default=0)  # Количество рефералов, необходимых для получения бонуса
+
+
+class UserBonus(Base):
+    __tablename__ = 'user_bonuses'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    bonus_product_id = Column(Integer, ForeignKey('bonus_products.id'), nullable=False)
+    is_used = Column(Boolean, default=False)  # Использовал ли пользователь бонус
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", backref="bonuses")
+    bonus_product = relationship("BonusProduct")

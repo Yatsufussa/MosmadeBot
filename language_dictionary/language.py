@@ -72,6 +72,10 @@ MESSAGES_RU = {
     'order_items': 'Товар',
     'quantity_unit': 'Количество',
     'phone_number': 'Ваш номер телефона',
+    'enter_promo_code': "Введите промокод:",
+    'promo_success': "Промокод '{promo_code}' успешно активирован!",
+    'promo_invalid': "Неверный промокод. Пожалуйста, попробуйте еще раз.",
+    'bonus_received': "Бонус за 5 рефералов",
 }
 
 
@@ -143,6 +147,10 @@ MESSAGES_UZ = {
     'order_items': 'Tovar: ',
     'quantity_unit': 'Soni: ',
     'phone_number': 'Telefon raqamingiz: ',
+    'enter_promo_code': "Promokodni kiriting:",
+    'promo_success': "Promokod '{promo_code}' muvaffaqiyatli faollashtirildi!",
+    'promo_invalid': "Noto'g'ri promokod. Iltimos, qayta urinib ko'ring.",
+    'bonus_received': "5 referalingiz uchun Bonus!",
 
 }
 GENDER_MAPPING = {

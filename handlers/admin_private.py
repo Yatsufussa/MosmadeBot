@@ -22,7 +22,8 @@ from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_update_product_description_uz, orm_update_product_description_ru, orm_update_product_name_ru, \
     orm_update_product_name_uz, orm_get_all_user_ids, orm_get_all_excel_orders, orm_delete_all_excel_orders, \
     orm_get_user_by_tg_id, update_excel_order_status_to_cancelled, orm_get_order_by_id, orm_delete_order_by_id, \
-    update_order_status_to_finished, orm_add_promocode, orm_product_exists, orm_promocode_exists, orm_delete_promocode
+    update_order_status_to_finished, orm_add_promocode, orm_product_exists, orm_promocode_exists, orm_delete_promocode, \
+    orm_delete_bonus_product, orm_add_bonus_product
 from language_dictionary.language import GENDER_MAPPING, MESSAGES
 
 admin_router = Router()
@@ -79,6 +80,14 @@ class AddPromoCode(StatesGroup):
     enter_discount = State()   # Step 3: Enter the discount percentage
     enter_expiry_date = State()  # Step 4: Enter the expiry date (optional)
 # endregion
+
+class AddBonusProduct(StatesGroup):
+    name_ru = State()  # Russian name
+    name_uz = State()  # Uzbek name
+    description_ru = State()  # Russian description
+    description_uz = State()  # Uzbek description
+    image_url = State()  # Image URL
+    required_referrals = State()  # Number of required referrals
 
 
 # region ADMIN PANEL MAIN CATALOG PRODUCTS CATEGORIES
@@ -1215,3 +1224,124 @@ async def delete_promocode(message: Message):
         await message.answer(f"Промокод с ID {promo_code_id} успешно удален.")
     else:
         await message.answer(f"Промокод с ID {promo_code_id} не найден.")
+
+
+@admin_router.message(Command("add_bonus"))
+async def add_bonus_start(message: Message, state: FSMContext):
+    await message.answer("Введите название бонусного продукта на русском:")
+    await state.set_state(AddBonusProduct.name_ru)
+
+# Prompt for name in Russian
+@admin_router.message(AddBonusProduct.name_ru)
+async def process_bonus_name_ru(message: Message, state: FSMContext):
+    name_ru = message.text.strip()
+
+    if not name_ru:
+        await message.answer("Название не может быть пустым. Введите название бонусного продукта на русском:")
+        return
+
+    await state.update_data(name_ru=name_ru)
+    await message.answer("Введите название бонусного продукта на узбекском:")
+    await state.set_state(AddBonusProduct.name_uz)
+
+# Prompt for name in Uzbek
+@admin_router.message(AddBonusProduct.name_uz)
+async def process_bonus_name_uz(message: Message, state: FSMContext):
+    name_uz = message.text.strip()
+
+    if not name_uz:
+        await message.answer("Название не может быть пустым. Введите название бонусного продукта на узбекском:")
+        return
+
+    await state.update_data(name_uz=name_uz)
+    await message.answer("Введите описание бонусного продукта на русском:")
+    await state.set_state(AddBonusProduct.description_ru)
+
+# Prompt for description in Russian
+@admin_router.message(AddBonusProduct.description_ru)
+async def process_bonus_description_ru(message: Message, state: FSMContext):
+    description_ru = message.text.strip()
+
+    if not description_ru:
+        await message.answer("Описание не может быть пустым. Введите описание бонусного продукта на русском:")
+        return
+
+    await state.update_data(description_ru=description_ru)
+    await message.answer("Введите описание бонусного продукта на узбекском:")
+    await state.set_state(AddBonusProduct.description_uz)
+
+# Prompt for description in Uzbek
+@admin_router.message(AddBonusProduct.description_uz)
+async def process_bonus_description_uz(message: Message, state: FSMContext):
+    description_uz = message.text.strip()
+
+    if not description_uz:
+        await message.answer("Описание не может быть пустым. Введите описание бонусного продукта на узбекском:")
+        return
+
+    await state.update_data(description_uz=description_uz)
+    await message.answer("Отправьте URL изображения бонусного продукта (или напишите 'нет'):")
+    await state.set_state(AddBonusProduct.image_url)
+
+
+@admin_router.message(AddBonusProduct.image_url)
+async def process_bonus_image(message: Message, state: FSMContext):
+    image_url = message.text.strip()
+
+    if image_url.lower() == "нет":
+        image_url = None
+
+    data = await state.get_data()
+    name_ru = data["name_ru"]
+    name_uz = data["name_uz"]
+    description_ru = data["description_ru"]
+    description_uz = data["description_uz"]
+
+    await message.answer("Введите количество рефералов, необходимых для получения бонуса:")
+    await state.update_data(image_url=image_url)
+    await state.set_state(AddBonusProduct.required_referrals)
+
+@admin_router.message(AddBonusProduct.required_referrals)
+async def process_bonus_required_referrals(message: Message, state: FSMContext):
+    try:
+        required_referrals = int(message.text.strip())
+    except ValueError:
+        await message.answer("Пожалуйста, введите корректное число для количества рефералов.")
+        return
+
+    # Ensure we have valid data from previous steps
+    data = await state.get_data()
+    name_ru = data["name_ru"]
+    name_uz = data["name_uz"]
+    description_ru = data["description_ru"]
+    description_uz = data["description_uz"]
+    image_url = data.get("image_url")
+
+    # Save the bonus product to the database
+    await orm_add_bonus_product(name_ru, name_uz, description_ru, description_uz, image_url, required_referrals)
+
+    await message.answer(f"Бонусный продукт '{name_ru}' успешно добавлен!")
+    await state.clear()
+
+
+
+
+@admin_router.message(Command("delete_bonus"))
+async def delete_bonus(message: Message):
+    args = message.text.split()[1:]  # Extract arguments after the command
+
+    if not args:
+        await message.answer("Пожалуйста, укажите ID бонусного продукта для удаления.")
+        return
+
+    try:
+        bonus_id = int(args[0])  # Convert the bonus product ID to an integer
+    except ValueError:
+        await message.answer("Неверный формат ID бонусного продукта. Введите числовой идентификатор.")
+        return
+
+    # Delete the bonus product
+    if await orm_delete_bonus_product(bonus_id):
+        await message.answer(f"Бонусный продукт с ID {bonus_id} успешно удален.")
+    else:
+        await message.answer(f"Бонусный продукт с ID {bonus_id} не найден.")
