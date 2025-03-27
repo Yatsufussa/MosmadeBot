@@ -6,22 +6,19 @@ async def get_address_from_coordinates(latitude, longitude):
     url = "https://geocode-maps.yandex.ru/1.x/"
     params = {
         "apikey": YANDEX_API_KEY,
-        "geocode": f"{longitude},{latitude}",  # Yandex expects lon,lat format
+        "geocode": f"{longitude},{latitude}",
         "format": "json",
-        "lang": "ru_RU"  # Change to "uz_UZ" if needed
+        "lang": "ru_RU"
     }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as response:
-            data = await response.json()
-
-            try:
-                # Extract the full formatted location name
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=5) as response:
+                data = await response.json()
                 location_name = (
                     data["response"]["GeoObjectCollection"]["featureMember"][0]["GeoObject"]["metaDataProperty"]
                     ["GeocoderMetaData"]["text"]
                 )
-                return location_name  # Return full name instead of separate parts
-
-            except (KeyError, IndexError):
-                return "Локация не найдена"  # Handle cases where no data is found
+                return location_name
+    except (aiohttp.ClientError, KeyError, IndexError) as e:
+        return "Локация не найдена"

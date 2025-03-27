@@ -86,7 +86,6 @@ class Order(Base):
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order")
 
-
 class OrderItem(Base):
     __tablename__ = "order_items"
 
@@ -95,7 +94,6 @@ class OrderItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Integer)
     total_cost = Column(DECIMAL(10, 2))
-
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
 
@@ -108,15 +106,17 @@ class ExcelOrder(Base):
     category_name_ru = Column(String(255), nullable=False)
     product_name_ru = Column(String(255), nullable=False)
     product_quantity = Column(Integer, nullable=False)
-    initial_cost = Column(Float, nullable=False)  # New column for the initial cost
-    promo_code_name = Column(String(50), nullable=True)  # New column for promo code name
-    promo_discount_percentage = Column(Float, nullable=True)  # New column for discount percentage
-    total_cost = Column(Float, nullable=False)  # The final cost after applying the discount
+    initial_cost = Column(Float, nullable=False)
+    promo_code_name = Column(String(50), nullable=True)
+    promo_discount_percentage = Column(Float, nullable=True)
+    total_cost = Column(Float, nullable=False)
     customer_name = Column(String(255), nullable=False)
     username = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=False)
-    status = Column(String(20), nullable=False, default="pending")  # Default status set to 'pending'
-
+    status = Column(String(20), nullable=False, default="pending")
+    bonus_product_name = Column(String(255), nullable=True)  # Бонусный товар
+    location_name = Column(String(255), nullable=True)  # Локация
+    order_comment = Column(String(500), nullable=True)  # Добавлен комментарий
 
 class PromoCode(Base):
     __tablename__ = "promo_codes"

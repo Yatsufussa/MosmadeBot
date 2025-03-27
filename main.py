@@ -16,7 +16,6 @@ ALLOWED_UPDATES = ['message, edited_message']
 bot = Bot(token=os.getenv('TOKEN'))
 bot.my_admins_list = []
 
-
 dp = Dispatcher()
 register_handlers_user_private(bot)
 dp.include_router(user_private)
@@ -30,8 +29,10 @@ async def on_startup(bot):
         await drop_db()
     await create_db()
 
+
 async def on_shutdown(bot):
     print('Bot Spit')
+
 
 async def main():
     dp.startup.register(on_startup)
@@ -41,5 +42,6 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_my_commands(commands=private, scope=types.BotCommandScopeAllPrivateChats())
     await dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
+
 
 asyncio.run(main())

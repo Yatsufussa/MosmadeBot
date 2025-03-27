@@ -84,7 +84,7 @@ admin_product_change = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Имя', callback_data='change_p_name'),
      InlineKeyboardButton(text='Описание', callback_data='change_p_description')],
     [InlineKeyboardButton(text='Цену', callback_data='change_p_price'),
-     InlineKeyboardButton(text='Фотографию', callback_data='change_p_photo')],
+     InlineKeyboardButton(text='Видио', callback_data='change_p_video')],
     [InlineKeyboardButton(text='Назад', callback_data='to_admin_product')],
 ])
 
@@ -169,10 +169,10 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🛒 Корзина", callback_data='basket'),
-                InlineKeyboardButton(text="Реферальная ссылка", callback_data='refer')
+                InlineKeyboardButton(text="💝 Заберите бонус", callback_data='refer')
             ],
             [
-                InlineKeyboardButton(text="🎁 Промокод", callback_data='promo_code'),
+                #InlineKeyboardButton(text="🎁 Промокод", callback_data='promo_code'),
                 InlineKeyboardButton(text="📦 Мои заказы", callback_data='my_orders')
             ],
             [
@@ -187,10 +187,10 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🛒 Savat", callback_data='basket'),
-                InlineKeyboardButton(text="Referall ssilkam", callback_data='refer')
+                InlineKeyboardButton(text="💝Bonusingizni oling", callback_data='refer')
             ],
             [
-                InlineKeyboardButton(text="🎁 Promokod", callback_data='promo_code'),
+                #InlineKeyboardButton(text="🎁 Promokod", callback_data='promo_code'),
                 InlineKeyboardButton(text="📦 Mening buyurtmalarim", callback_data='my_orders')
             ],
             [
@@ -202,8 +202,28 @@ def main_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def comment_keyboard(order_id: str, language_code: str) -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой 'Добавить комментарий к заказу'"""
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+    buttons = [[InlineKeyboardButton(text=messages['add_comment'], callback_data=f'add_comment_{order_id}')]]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def question_keyboard(language_code: str) -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой 'Главное меню' для возврата."""
+    if language_code == 'ru':
+        buttons = [[InlineKeyboardButton(text="🔙 Главное меню", callback_data='to_main')]]
+    elif language_code == 'uz':
+        buttons = [[InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data='to_main')]]
+    else:
+        buttons = []
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для корзины с учетом языка пользователя."""
     if language_code == 'ru':
         buttons = [
             [InlineKeyboardButton(text='💰Купить', callback_data='buy_product'),
@@ -214,12 +234,13 @@ def create_basket_buttons(language_code: str) -> InlineKeyboardMarkup:
         buttons = [
             [InlineKeyboardButton(text='💰Sotib olish', callback_data='buy_product'),
              InlineKeyboardButton(text="🛍Qo'shimcha qo'shish", callback_data='catalog')],
-            [InlineKeyboardButton(text='🗑Savatni tozalash', callback_data='clean_basket')],
+            [InlineKeyboardButton(text='🗑Savatni tozalash', callback_data='clean_basket')] # Новая кнопка
         ]
     else:
         buttons = []
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 
 ITEMS_PER_PAGE = 6

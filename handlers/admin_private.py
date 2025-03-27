@@ -2,6 +2,8 @@ import logging
 from datetime import datetime
 
 from aiogram.utils.markdown import hbold
+from openpyxl.reader.excel import load_workbook
+from openpyxl.styles import PatternFill
 
 import buttons.inline_buttons as kb
 import pandas as pd
@@ -23,7 +25,7 @@ from database.orm_queries import orm_add_category, orm_delete_category, \
     orm_update_product_name_uz, orm_get_all_user_ids, orm_get_all_excel_orders, orm_delete_all_excel_orders, \
     orm_get_user_by_tg_id, update_excel_order_status_to_cancelled, orm_get_order_by_id, orm_delete_order_by_id, \
     update_order_status_to_finished, orm_add_promocode, orm_product_exists, orm_promocode_exists, orm_delete_promocode, \
-    orm_delete_bonus_product, orm_add_bonus_product
+    orm_delete_bonus_product, orm_add_bonus_product, orm_update_product_video
 from language_dictionary.language import GENDER_MAPPING, MESSAGES
 
 admin_router = Router()
@@ -32,6 +34,7 @@ admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 GROUP_CHAT_IDS_WITH_THREADS = [
     {"chat_location": -1002408666314, "message_thread_id": 73},  # Example thread ID
 ]
+
 
 # region ADMINS CATEGORY MANIPULATION STATES
 class AddCategory(StatesGroup):
@@ -68,17 +71,20 @@ class ChangeProduct(StatesGroup):
     ch_description_ru = State()
     ch_description_uz = State()
     ch_price = State()
-    ch_photo = State()
+    ch_video = State()
 
 
 class DeleteProduct(StatesGroup):
     delete_product = State()
 
+
 class AddPromoCode(StatesGroup):
     enter_promo_code = State()  # Step 1: Enter the promo code text
     enter_product_id = State()  # Step 2: Enter the product ID (optional)
-    enter_discount = State()   # Step 3: Enter the discount percentage
+    enter_discount = State()  # Step 3: Enter the discount percentage
     enter_expiry_date = State()  # Step 4: Enter the expiry date (optional)
+
+
 # endregion
 
 class AddBonusProduct(StatesGroup):
@@ -102,11 +108,15 @@ async def admin_features(message: types.Message):
         "❌ /OrderCancelation [Order ID] - Cancel and delete an order\n"
         "📍 /GetLocation [Order ID] - Get the location of an order\n"
         "📜 /getallorders - Download all orders as an Excel document\n"
-        "🎁 /add_promocode - Add a new promo code\n\n"
+        "🎁 /add_promocode - Add a new promo code\n"
+        "💰 /add_bonus - Add a bonus\n"
+        "🗑️ /delete_bonus - Delete a bonus\n"
+        "🚫 /promocodedelete - Delete a promo code\n\n"
         "⚠️ /ExcelOrdersClear - <b>WARNING:</b> Deletes all Excel order records! (Recommended to download first via /getallorders)\n",
         reply_markup=kb.admin_main,
         parse_mode="HTML"
     )
+
 
 @admin_router.message(Command("stop"))
 async def admin_stop(message: types.Message):
@@ -185,8 +195,6 @@ async def admin_add_category_name_uz(message: Message, state=FSMContext):
 
     # Clear state after finishing the process
     await state.clear()
-
-
 
 
 # endregion ADD CATEGORY
@@ -414,6 +422,7 @@ async def confirm_category_deletion(message: Message, state: FSMContext):
 
     await state.clear()
 
+
 # endregion delete
 @admin_router.callback_query(F.data == 'to_admin_category')
 async def admin_main_back(callback: CallbackQuery):
@@ -479,7 +488,6 @@ async def select_category_for_product(callback: CallbackQuery, state: FSMContext
     await state.set_state(AddProduct.add_name_ru)
 
 
-
 @admin_router.message(AddProduct.add_name_ru)
 async def admin_add_product_name(message: Message, state=FSMContext):
     await state.update_data(name_ru=message.text)
@@ -522,6 +530,7 @@ async def admin_add_product_video(message: Message, state: FSMContext):
 
     # Save the product with the video
     await save_product_and_clear_state(message, state)
+
 
 async def save_product_and_clear_state(message: Message, state: FSMContext):
     try:
@@ -627,6 +636,7 @@ async def category_pagination(callback: CallbackQuery, state: FSMContext):
 async def show_product_details(callback: types.CallbackQuery, state: FSMContext):
     product_id = int(callback.data.split('_')[1])
     product = await orm_get_product_by_id(product_id)
+
     if product:
         await state.update_data(product_id=product_id)
         text = (
@@ -637,12 +647,14 @@ async def show_product_details(callback: types.CallbackQuery, state: FSMContext)
             f"Цена: {product.price} Сум\n\n\n"
             "ВЫБЕРИТЕ ЧТО ХОТИТЕ ИЗМЕНИТЬ"
         )
-        if product.image_url:
-            await callback.message.delete()
-            await callback.message.answer_photo(photo=product.image_url, caption=text,
+
+        await callback.message.delete()
+
+        if product.video_url:
+            await callback.message.answer_video(video=product.video_url, caption=text,
                                                 reply_markup=kb.admin_product_change)
         else:
-            await callback.message.edit_text(text, reply_markup=kb.admin_main)
+            await callback.message.answer(text, reply_markup=kb.admin_product_change)
     else:
         await callback.message.edit_text("Продукт не найден", reply_markup=kb.admin_main)
 
@@ -745,25 +757,26 @@ async def set_new_product_price(message: Message, state: FSMContext):
     await state.clear()
 
 
-@admin_router.callback_query(F.data == 'change_p_photo')
-async def start_change_product_photo(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(ChangeProduct.ch_photo)
+@admin_router.callback_query(F.data == 'change_p_video')
+async def start_change_product_video(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(ChangeProduct.ch_video)
     await callback.answer('')
-    await callback.message.answer('Отправьте новое фото продукта', reply_markup=ReplyKeyboardRemove())
+    await callback.message.answer('Отправьте новое видео продукта', reply_markup=ReplyKeyboardRemove())
 
 
-@admin_router.message(ChangeProduct.ch_photo, F.photo)
-async def set_new_product_photo(message: Message, state: FSMContext):
-    new_photo = message.photo[-1].file_id
+@admin_router.message(ChangeProduct.ch_video, F.video)
+async def set_new_product_video(message: Message, state: FSMContext):
+    new_video = message.video.file_id
     data = await state.get_data()
     product_id = data.get('product_id')
-    updated = await orm_update_product_photo(product_id, new_photo)
+    updated = await orm_update_product_video(product_id, new_video)
 
     if updated:
-        await message.answer(f'Фотография продукта обновлена.', reply_markup=kb.admin_product)
+        await message.answer(f'Видео продукта обновлено.', reply_markup=kb.admin_product)
     else:
         await message.answer(f'Продукт с ID {product_id} не найден.', reply_markup=kb.admin_product)
     await state.clear()
+
 
 
 # endregion
@@ -943,6 +956,8 @@ async def send_all_orders(message: types.Message, session: AsyncSession):
         "Phone Number": [],
         "Orders Time": [],
         "Location": [],
+        "Bonus Product Name": [],  # ✅ Added
+        "Location Name": [],  # ✅ Added
         "Status": []
     }
 
@@ -951,17 +966,16 @@ async def send_all_orders(message: types.Message, session: AsyncSession):
         data["Category Name (RU)"].append(order.get("category_name_ru", "N/A"))
         data["Product Name (RU)"].append(order.get("product_name_ru", "N/A"))
         data["Product Quantity"].append(order.get("product_quantity", 0))
-
-        # Use .get() to prevent KeyError
         data["Initial Cost"].append(order.get("initial_cost", 0.0))
         data["Promo Code"].append(order.get("promo_code_name", "N/A"))
         data["Discount %"].append(order.get("promo_discount_percentage", 0.0))
         data["Total Cost"].append(order.get("total_cost", 0.0))
-
         data["Customer Name"].append(order.get("customer_name", "N/A"))
         data["Username"].append(order.get("username", "N/A"))
         data["Phone Number"].append(order.get("phone_number", "N/A"))
         data["Orders Time"].append(order.get("order_created_at", "N/A"))
+        data["Bonus Product Name"].append(order.get("bonus_product_name", "N/A"))  # ✅ Added
+        data["Location Name"].append(order.get("location_name", "N/A"))  # ✅ Added
 
         location = f"{order.get('latitude', 'N/A')}, {order.get('longitude', 'N/A')}"
         data["Location"].append(location)
@@ -970,16 +984,43 @@ async def send_all_orders(message: types.Message, session: AsyncSession):
 
     df = pd.DataFrame(data)
 
+    # Create a temporary file to save the Excel file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         file_path = tmp.name
         df.to_excel(file_path, index=False)
 
+    # Open file to apply colors
+    wb = load_workbook(file_path)
+    ws = wb.active
+
+    # Define colors
+    status_colors = {
+        "FINISHED": "00FF00",  # Green
+        "PENDING": "ADD8E6",  # Light Blue
+        "CANCELLED": "FF0000"  # Red
+    }
+
+    # Find "Status" column index
+    status_col_index = df.columns.get_loc("Status") + 1
+
+    for row in range(2, len(df) + 2):  # Start from row 2 (skip headers)
+        cell = ws.cell(row=row, column=status_col_index)
+
+        status_value = str(cell.value).strip().upper()  # Normalize status text
+
+        fill_color = status_colors.get(status_value, "FFFFFF")  # Default to white
+        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+
+    # Save the modified Excel file
+    wb.save(file_path)
+    wb.close()
+
+    # Send file
     file_input = FSInputFile(file_path)
     await message.reply_document(file_input)
 
+    # Remove file after sending
     os.remove(file_path)
-
-
 
 
 @admin_router.message(Command("ExcelOrdersClear"))
@@ -1204,7 +1245,6 @@ async def process_expiry_date(message: Message, state: FSMContext):
     await state.clear()  # Clear the state
 
 
-
 @admin_router.message(Command("promocodedelete"))
 async def delete_promocode(message: Message):
     args = message.text.split()[1:]  # Extract arguments after the command
@@ -1231,6 +1271,7 @@ async def add_bonus_start(message: Message, state: FSMContext):
     await message.answer("Введите название бонусного продукта на русском:")
     await state.set_state(AddBonusProduct.name_ru)
 
+
 # Prompt for name in Russian
 @admin_router.message(AddBonusProduct.name_ru)
 async def process_bonus_name_ru(message: Message, state: FSMContext):
@@ -1243,6 +1284,7 @@ async def process_bonus_name_ru(message: Message, state: FSMContext):
     await state.update_data(name_ru=name_ru)
     await message.answer("Введите название бонусного продукта на узбекском:")
     await state.set_state(AddBonusProduct.name_uz)
+
 
 # Prompt for name in Uzbek
 @admin_router.message(AddBonusProduct.name_uz)
@@ -1257,6 +1299,7 @@ async def process_bonus_name_uz(message: Message, state: FSMContext):
     await message.answer("Введите описание бонусного продукта на русском:")
     await state.set_state(AddBonusProduct.description_ru)
 
+
 # Prompt for description in Russian
 @admin_router.message(AddBonusProduct.description_ru)
 async def process_bonus_description_ru(message: Message, state: FSMContext):
@@ -1269,6 +1312,7 @@ async def process_bonus_description_ru(message: Message, state: FSMContext):
     await state.update_data(description_ru=description_ru)
     await message.answer("Введите описание бонусного продукта на узбекском:")
     await state.set_state(AddBonusProduct.description_uz)
+
 
 # Prompt for description in Uzbek
 @admin_router.message(AddBonusProduct.description_uz)
@@ -1301,6 +1345,7 @@ async def process_bonus_image(message: Message, state: FSMContext):
     await state.update_data(image_url=image_url)
     await state.set_state(AddBonusProduct.required_referrals)
 
+
 @admin_router.message(AddBonusProduct.required_referrals)
 async def process_bonus_required_referrals(message: Message, state: FSMContext):
     try:
@@ -1322,8 +1367,6 @@ async def process_bonus_required_referrals(message: Message, state: FSMContext):
 
     await message.answer(f"Бонусный продукт '{name_ru}' успешно добавлен!")
     await state.clear()
-
-
 
 
 @admin_router.message(Command("delete_bonus"))

@@ -1,3 +1,4 @@
+import asyncio
 import locale
 from datetime import datetime
 from typing import Union
@@ -13,17 +14,37 @@ from sqlalchemy.exc import SQLAlchemyError
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
-from language_dictionary.language import MESSAGES, GENDER_MAPPING
+from language_dictionary.language import MESSAGES
 
-from database.orm_queries import orm_set_user, orm_get_product_by_id, orm_create_order_item, \
-    orm_get_order_items_by_order_id, orm_clean_order_items_by_order_id, orm_create_order, orm_update_user, \
-    orm_get_user_by_tg_id, orm_update_user_language, orm_get_user_language, orm_get_category_name, orm_save_excel_order, \
-    orm_create_user_by_tg_id, orm_get_user_by_referral_code, orm_save_user, save_user_location, \
-    orm_get_referred_users_count, orm_get_referred_users_with_orders_count, orm_get_user_location, \
-    orm_update_user_location, orm_update_user_phone, orm_get_promo_code_by_text, orm_activate_promo_code_for_user, \
-    orm_get_promo_code_by_id, orm_get_orders_by_user_id, \
-    orm_get_excel_orders_by_user_phone, orm_add_bonus_to_order, orm_get_bonus_products_by_referral_count, \
-    orm_add_bonus_to_user
+from database.orm_queries import (
+    orm_get_product_by_id,
+    orm_create_order_item,
+    orm_get_order_items_by_order_id,
+    orm_clean_order_items_by_order_id,
+    orm_create_order,
+    orm_update_user,
+    orm_get_user_by_tg_id,
+    orm_update_user_language,
+    orm_get_user_language,
+    orm_get_category_name,
+    orm_save_excel_order,
+    orm_create_user_by_tg_id,
+    orm_get_user_by_referral_code,
+    orm_save_user,
+    save_user_location,
+    orm_get_referred_users_count,
+    orm_get_referred_users_with_orders_count,
+    orm_get_user_location,
+    orm_update_user_location,
+    orm_update_user_phone,
+    orm_get_promo_code_by_text,
+    orm_activate_promo_code_for_user,
+    orm_get_promo_code_by_id,
+    orm_get_excel_orders_by_user_phone,
+    orm_get_bonus_products_by_referral_count,
+    orm_add_bonus_to_user,
+    orm_get_user_bonus_count, orm_get_referred_users_with_orders,
+)
 
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 user_private = Router()
@@ -99,7 +120,25 @@ async def cmd_start(message: CallbackQuery, state: FSMContext):
             await message.answer("Ошибка: недействительный реферальный код!")
     else:
         await orm_save_user(new_user)
-        await message.answer("Добро пожаловать в TAYYOR BOX!")
+        await message.answer(
+            "Assalomu alaykum! 🥰\n\n"
+            "“Tayyor Box”ga xush kelibsiz!\n\n"
+            "✅ Bizning botimiz yordamida siz uchun eng kerakli moyushiy gigienik vositalarni qulay tarzda bir joyga jamlab, tezda buyurtma berishingiz mumkin.\n\n"
+            "1️⃣ “Tayyor Box” - siz uchun maxsus tayyorlangan uy tozalash uchun vositalar to’plami.\n\n"
+            "2️⃣ Oyila, Ayollar va Erkaklar uchun gigiena mahsulotlar to’plami\n\n"
+            "3️⃣ Sovgʻa uchun Boxlar\n\n"
+            "4️⃣ Bayramlarga maxsus Sovg’a Boxlar\n\n"
+            "🫶🏻 Eng arzon narhda yuqori sifatli mahsulotlarga ega bo’ling! Biz bilan toza va qulay hayot kechirishni boshlang!\n\n"
+            "-------------------------------------------\n\n"
+            "Ассаламу алейкум! 🥰\n\n"
+            "Добро пожаловать в “Tayyor Box”!\n\n"
+            "✅ С помощью нашего бота вы можете удобно собрать в одном месте все необходимые средства гигиены и бытовой химии, а затем быстро оформить заказ.\n\n"
+            "1️⃣ “Tayyor Box” – это специально подготовленный набор для уборки дома.\n\n"
+            "2️⃣ Гигиенические наборы для семей, женщин и мужчин.\n\n"
+            "3️⃣ Подарочные боксы – оригинальные наборы для любого случая.\n\n"
+            "4️⃣ Праздничные подарочные боксы – специальные предложения к праздникам.\n\n"
+            "🫶🏻 Получайте качественные товары по самым выгодным ценам! Начните жить чисто и комфортно вместе с нами!"
+        )
 
     await state.set_state(LanguageState.language)
     await state.update_data(language='ru')
@@ -300,6 +339,7 @@ async def update_product_view(callback: CallbackQuery, state: FSMContext):
             f"{messages['product_quantity']}: {1}\n\n"
         )
 
+
         data = await state.get_data()
         quantity = data.get('quantity', 1)
         keyboard = kb.create_product_buttons(quantity, language_code=language_code)
@@ -475,7 +515,6 @@ async def handle_product_basker(callback: CallbackQuery, state: FSMContext):
         await callback.answer(added_to_cart_message)
 
     except SQLAlchemyError as e:
-        print(f"Database error: {e}")
         await callback.answer("Произошла ошибка при добавлении товара в корзину. Пожалуйста, попробуйте снова.")
 
 
@@ -644,6 +683,7 @@ async def show_basket(callback_or_message, state: FSMContext):
 def register_handlers_user_private(bot: Bot):
     @user_private.callback_query(F.data == 'buy_product')
     async def user_buy_product(callback: CallbackQuery, state: FSMContext):
+
         data = await state.get_data()
         order_id = data.get('order_id')
         user = await orm_get_user_by_tg_id(callback.from_user.id)
@@ -674,6 +714,7 @@ def register_handlers_user_private(bot: Bot):
         # 📍 Get and format user's location
         user_location = await orm_get_user_location(user.id)
         location_text = ""
+        location_name = None  # Initialize location_name
         if user_location:
             latitude, longitude = user_location
             location_name = await get_address_from_coordinates(latitude, longitude)
@@ -683,9 +724,17 @@ def register_handlers_user_private(bot: Bot):
         referral_count = await orm_get_referred_users_with_orders_count(user.id)
         bonus_product = await orm_get_bonus_products_by_referral_count(referral_count)
         bonus_text = ""
+        bonus_product_name = None  # Initialize bonus_product_name
         if bonus_product:
-            await orm_add_bonus_to_user(user.id, bonus_product.id)
-            bonus_text = f"🎁 {MESSAGES['ru']['bonus_received']}: {bonus_product.name_ru}\n"
+            user_bonus_count = await orm_get_user_bonus_count(user.id)  # Получаем количество уже выданных бонусов
+            bonus_threshold = referral_count // 5  # Количество раз, когда он достиг кратности 5
+
+            if bonus_threshold > user_bonus_count:  # Если есть новые 5 рефералов, выдаем бонус
+                await orm_add_bonus_to_user(user.id, bonus_product.id)
+                bonus_text = f"🎁 {MESSAGES['ru']['bonus_received']}: {bonus_product.name_ru}\n"
+                bonus_product_name = bonus_product.name_ru  # Set bonus product name
+            else:
+                bonus_text = ""  # Бонус уже выдан, не дублируем
 
         # 📢 Constructing group message
         group_messages = MESSAGES['ru']
@@ -708,7 +757,9 @@ def register_handlers_user_private(bot: Bot):
                         Decimal(promo_code.discount) / Decimal(100))) if promo_code else item.total_cost,
                 customer_name=callback.from_user.first_name,
                 username=callback.from_user.username,
-                phone_number=user.phone_number
+                phone_number=user.phone_number,
+                bonus_product_name=bonus_product_name,  # Pass bonus product name
+                location_name=location_name  # Pass location name
             )
 
             group_text += (
@@ -732,6 +783,8 @@ def register_handlers_user_private(bot: Bot):
             f"☎️ {group_messages['phone']}: {user.phone_number}\n"
             f"{location_text}"
         )
+        if order_comment:
+            group_text += f"\n📝 {group_messages['order_comment']}: {order_comment}\n"
 
         # 🚀 Send messages to group chats
         for group in GROUP_CHAT_IDS_WITH_THREADS:
@@ -753,35 +806,56 @@ def register_handlers_user_private(bot: Bot):
                     message_thread_id=group.get("message_thread_id")
                 )
 
-        # ✅ Send confirmation to the user (without order details)
-        user_confirmation = f"{group_messages['order_sent_confirmation']}\n\n"
+        # Определяем язык пользователя
+        user_language = user.language if user.language else 'ru'  # Если язык не задан, используем русский
+        messages = MESSAGES[user_language]  # Берём словарь с нужным языком
+
+        # ✅ Формируем сообщение для пользователя
+        user_confirmation = f"{messages['order_sent_confirmation']}\n\n"
 
         # Добавляем список товаров
-        user_confirmation += f"{group_messages['order_items']}:\n"
+        user_confirmation += f"{messages['order_items']}:\n"
         for item in order_items:
             product = await orm_get_product_by_id(item.product_id)
-            product_name = product.name_ru  # Используем русский язык
-            user_confirmation += f"• {product_name} ({item.quantity} {group_messages['quantity_unit']})\n"
+            product_name = product.name_uz if user_language == 'uz' else product.name_ru  # Выбираем язык товара
+            user_confirmation += f"• {product_name} ({item.quantity} {messages['quantity_unit']})\n"
 
-        if promo_code_text:
-            user_confirmation += (
-                f"\n{group_messages['initial_cost']}: {locale.format_string('%d', total_cost, grouping=True)} {group_messages['currency']}\n"
-                f"{promo_code_text}"
-                f"{group_messages['discounted_cost']}: {locale.format_string('%d', discounted_cost, grouping=True)} {group_messages['currency']}\n"
-            )
+        # ✅ Рассчитываем и добавляем стоимость заказа
+        original_total_cost = sum(Decimal(item.total_cost) for item in order_items)  # Общая цена без скидки
+        discounted_total_cost = original_total_cost  # По умолчанию равно обычной цене
+
+        if promo_code:
+            discount_percentage = Decimal(promo_code.discount)
+            discounted_total_cost = original_total_cost * (Decimal(1) - discount_percentage / Decimal(100))
+
+        original_price_formatted = locale.format_string('%d', original_total_cost, grouping=True)
+        discounted_price_formatted = locale.format_string('%d', discounted_total_cost, grouping=True)
+
+        user_confirmation += f"\n💰 {messages['total_order_cost']}: {original_price_formatted} {messages['currency']}\n"
+
+        if promo_code:
+            user_confirmation += f"{messages['promo_applied']}: {promo_code.code} (-{discount_percentage}%)\n"
+            user_confirmation += f"💸 {messages['discounted_cost']}: {discounted_price_formatted} {messages['currency']}\n"
 
         if bonus_text:
             user_confirmation += f"\n{bonus_text}\n"
 
+        if order_comment:
+            user_confirmation += f"\n📝 {messages['order_comment']}: {order_comment}\n"
+
         if location_text:
             user_confirmation += f"\n{location_text}\n"
 
-        await callback.answer(group_messages['order_sent'])
+        # ✅ Отправляем сообщение пользователю на его языке
+        await callback.answer(messages['order_sent'])
         await callback.message.answer(user_confirmation)
         await callback.message.delete()
-        await callback.message.answer(group_messages['welcome'], reply_markup=kb.main_menu_keyboard('ru'))
 
-        # ✅ Clear the order items from the basket
+        # ✅ Отправляем приветственное сообщение на нужном языке
+        welcome_text = messages['welcome']
+        await callback.message.answer(welcome_text, reply_markup=kb.main_menu_keyboard(user_language))
+
+        # ✅ Очищаем корзину пользователя
         await orm_clean_order_items_by_order_id(order_id)
 
     @user_private.message(UserQuestionState.awaiting_question)
@@ -839,49 +913,51 @@ async def get_orders(message: types.Message, state: FSMContext):
 async def get_refer(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
 
-    # Get the user's language (if available)
+    # Получаем язык пользователя
     language_code = await orm_get_user_language(callback.from_user.id)
 
-    # Retrieve the user from the database asynchronously
-    user = await orm_get_user_by_tg_id(callback.from_user.id)
+    # Определяем сообщения в зависимости от языка
+    if language_code == 'ru':
+        bonus_message = (
+            "🎁 Информация о ваших бонусах:\n\n"
+            "Общее количество бонусов: 0\n"
+            "Подтверждённые бонусы: 0\n\n"
+            "Чтобы подтвердить бонусы, попросите ваших друзей сделать хотя бы 1 заказ через вашу ссылку. "
+            "Бонусный продукт добавится вам автоматически после покупки."
+        )
 
-    if not user:
-        # If no user found, exit early or send an error message
-        await callback.message.answer("User not found in the system.")
-        return
+        referral_message = "Перешлите свою ссылку друзьям 👇🏻👇🏻👇🏻"
 
-    referral_code = user.referral_code
-    referral_link = f"https://t.me/TayyorBoxBot?start=ref_{referral_code}"  # Construct referral link
+        tayyor_box_message = (
+            "🎁 “Tayyor Box” – это специально подготовленный набор необходимых товаров и средств для вас.\n\n"
+            "❤️ Самая низкая цена и быстрая доставка\n\n"
+            "🫶🏻 Чтобы оформить заказ, перейдите по ссылке: https://t.me/TayyorBoxBot?start=ref_f352f3ab 👈🏻"
+        )
+    else:  # Uzbek by default
+        bonus_message = (
+            "🎁 Sizning bonuslaringiz haqida ma’lumot:\n\n"
+            "Umumiy bonuslar soni: 0\n"
+            "Tasdiqlangan bonuslar: 0\n\n"
+            "Bonuslarni tasdiqlash uchun do‘stlaringizdan sizning havolangiz orqali kamida 1 ta buyurtma berishlarini so‘rang. "
+            "Mahsulot sotib olingandan so‘ng bonus avtomatik ravishda sizga qo‘shiladi."
+        )
 
-    # Get the correct messages dictionary based on the user's language
-    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+        referral_message = "Do‘stlaringizga havolangizni yuboring 👇🏻👇🏻👇🏻"
 
-    # Count how many users were referred by the current user
-    referred_users_count = await orm_get_referred_users_count(user.id)
+        tayyor_box_message = (
+            "🎁 “Tayyor Box” - siz uchun maxsus tayyorlangan kerakli mahsulotlar va vositalar to’plami.\n\n"
+            "🫶🏻 Eng arzon narxda va tezkor yetkazib beramiz\n\n"
+            "❤️ Buyurtma uchun havoladan o’ting: https://t.me/TayyorBoxBot?start=ref_f352f3ab 👈🏻"
+        )
 
-    # Count how many referred users have made at least one order
-    referred_users_with_orders_count = await orm_get_referred_users_with_orders_count(user.id)
+    await callback.message.answer(bonus_message)
+    await callback.message.answer(referral_message)
+    await callback.message.answer(tayyor_box_message)
 
-    # First message: Referral statistics
-    status_message = (
-        f"{messages['refer_message']}\n\n"
-        f"{messages['referred_users_count']}: {referred_users_count}\n"
-        f"{messages['referred_users_with_orders_count']}: {referred_users_with_orders_count}"
-    )
+    # Главное меню
+    await callback.message.answer("🏠 Главное меню", reply_markup=kb.main_menu_keyboard(language_code))
 
-    await callback.message.answer(status_message)
 
-    # Second message: Referral link and instructions
-    link_message = (
-        f"{messages['your_referral_code']}: {referral_code}\n\n"
-        f"{messages['share_with_friends']}\n\n"
-        f"{messages['your_referral_link']}: [Click here]({referral_link})👈"
-    )
-
-    await callback.message.answer(link_message, parse_mode="MarkdownV2")
-
-    # Send main menu keyboard
-    await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
 
 
 class UserQuestionState(StatesGroup):
@@ -894,9 +970,10 @@ async def get_contact_help(callback: CallbackQuery, state: FSMContext):
     language_code = await orm_get_user_language(callback.from_user.id)
     messages = MESSAGES.get(language_code, MESSAGES['ru'])
 
-    # Prompt the user to send their question
-    await callback.message.answer(messages['send_question'])
-    await state.set_state(UserQuestionState.awaiting_question)  # Set state to await the user's question
+    # Отправка сообщения с локализованной клавиатурой
+    await callback.message.answer(messages['send_question'], reply_markup=kb.question_keyboard(language_code))
+    await state.set_state(UserQuestionState.awaiting_question)
+
 
 
 @user_private.callback_query(F.data == 'settings')
@@ -1099,6 +1176,7 @@ async def process_promo_code(message: Message, state: FSMContext):
     await state.clear()
 
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 @user_private.callback_query(F.data == 'my_orders')
 async def user_my_orders(callback: CallbackQuery):
@@ -1110,12 +1188,10 @@ async def user_my_orders(callback: CallbackQuery):
 
     # Получаем заказы пользователя из таблицы ExcelOrder, только со статусом "pending"
     excel_orders = await orm_get_excel_orders_by_user_phone(user.phone_number)
-
-    # Фильтруем заказы со статусом "pending"
     pending_orders = [order for order in excel_orders if order.status == "pending"]
 
     if not pending_orders:
-        await callback.answer(messages['no_orders'])
+        await callback.message.answer(messages['no_orders'], reply_markup=kb.main_menu_keyboard(language_code))
         return
 
     grouped_orders = {}
@@ -1133,10 +1209,8 @@ async def user_my_orders(callback: CallbackQuery):
             }
 
         grouped_orders[order.order_id]["items"].append({
-            # "category": order.category_name_ru,
             "product_name": order.product_name_ru,
             "quantity": order.product_quantity,
-            "initial_cost": Decimal(order.initial_cost),
             "total_cost": Decimal(order.total_cost)
         })
         grouped_orders[order.order_id]["total_cost"] += Decimal(order.total_cost)
@@ -1147,16 +1221,13 @@ async def user_my_orders(callback: CallbackQuery):
     if user_location:
         latitude, longitude = user_location
         location_name = await get_address_from_coordinates(latitude, longitude)
-        location_text = f"📍 {messages['location']}: {location_name}\n"
-
-    order_texts = []
+        location_text = f"\n📍 {messages['location']}: {location_name}\n"
 
     for order_id, order_data in grouped_orders.items():
         text = f"{messages['order_id']}: {order_id}\n\n"
 
         for item in order_data["items"]:
             text += (
-                # f"{messages['category']}: {item['category']}\n"
                 f"{messages['product_name']}: {item['product_name']}\n"
                 f"{messages['quantity']}: {item['quantity']}\n"
                 f"{messages['total_cost']}: {locale.format_string('%d', item['total_cost'], grouping=True)} {messages['currency']}\n\n"
@@ -1164,7 +1235,6 @@ async def user_my_orders(callback: CallbackQuery):
 
         total_cost = order_data["total_cost"]
         discount_text = ""
-
         if order_data["promo_discount"] > 0:
             discounted_total_cost = total_cost * (Decimal(1) - order_data["promo_discount"] / Decimal(100))
             formatted_discounted_total = locale.format_string('%d', discounted_total_cost, grouping=True)
@@ -1183,16 +1253,59 @@ async def user_my_orders(callback: CallbackQuery):
         )
 
         if location_text:
-            text += location_text  # Добавляем локацию в текст заказа
+            text += location_text
 
-        order_texts.append(text)
-
-    for order_text in order_texts:
-        await callback.message.answer(order_text)
+        # Добавляем кнопку "Добавить комментарий к заказу"
+        await callback.message.answer(text, reply_markup=kb.comment_keyboard(order_id, language_code))
 
     await callback.message.answer(messages['welcome'], reply_markup=kb.main_menu_keyboard(language_code))
     await callback.answer()
 
 
+
 def calculate_discounted_price(price: float, discount: float) -> float:
     return price * (1 - discount / 100)
+
+
+class UserCommentState(StatesGroup):
+    awaiting_comment = State()
+
+
+@user_private.callback_query(F.data.startswith('add_comment_'))
+async def ask_for_comment(callback: CallbackQuery, state: FSMContext):
+    order_id = callback.data.split('_')[-1]
+    await state.update_data(order_id=order_id)
+    language_code = await orm_get_user_language(callback.from_user.id)
+    messages = MESSAGES.get(language_code, MESSAGES['ru'])
+    await callback.message.answer(messages['enter_comment'])
+    await state.set_state(UserCommentState.awaiting_comment)
+    await callback.answer()
+
+
+@user_private.message(UserCommentState.awaiting_comment)
+async def forward_user_comment(message: Message, state: FSMContext, bot: Bot):
+    target_chat_id = -1002408666314
+    target_thread_id = 6
+    data = await state.get_data()
+    order_id = data.get('order_id')
+
+    user_info = f"👤 {message.from_user.full_name}\n"
+    if message.from_user.username:
+        user_info += f"🔗 @{message.from_user.username}\n"
+    user_info += f"🆔 {message.from_user.id}\n"
+    user_info += f"📝 КОММЕНТАРИЙ ДЛЯ ЗАКАЗА"
+    user_info += f"📦 {MESSAGES['ru']['order_id']}: {order_id}\n\n"
+
+    try:
+        await bot.send_message(
+            chat_id=target_chat_id,
+            text=user_info + message.text,
+            message_thread_id=target_thread_id
+        )
+        language_code = await orm_get_user_language(message.from_user.id)
+        messages = MESSAGES.get(language_code, MESSAGES['ru'])
+        await message.answer(messages['comment_sent'], reply_markup=kb.main_menu_keyboard(language_code))
+    except Exception as e:
+        await message.answer("⚠️ An error occurred while sending your comment. Please try again later.")
+
+    await state.clear()

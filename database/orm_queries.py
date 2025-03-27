@@ -391,13 +391,6 @@ async def orm_get_user_id_by_tg_id(tg_id: int) -> int:
             return None
 
 
-async def orm_get_user_by_tg_id(tg_id: int) -> User:
-    async with SessionMaker() as session:
-        result = await session.execute(select(User).filter(User.tg_id == tg_id))
-        user = result.scalar()
-        return user
-
-
 async def orm_update_user(user: User):
     try:
         async with SessionMaker() as session:
@@ -410,7 +403,21 @@ async def orm_update_user(user: User):
         raise
 
 
-async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, product_quantity, initial_cost, promo_code_name, promo_discount_percentage, total_cost, customer_name, username, phone_number):
+async def orm_save_excel_order(
+        order_id,
+        category_name_ru,
+        product_name_ru,
+        product_quantity,
+        initial_cost,
+        promo_code_name,
+        promo_discount_percentage,
+        total_cost,
+        customer_name,
+        username,
+        phone_number,
+        bonus_product_name=None,  # New parameter for bonus product name
+        location_name=None  # New parameter for location name
+):
     async with SessionMaker() as session:
         new_excel_order = ExcelOrder(
             order_id=order_id,
@@ -423,11 +430,12 @@ async def orm_save_excel_order(order_id, category_name_ru, product_name_ru, prod
             total_cost=total_cost,
             customer_name=customer_name,
             username=username,
-            phone_number=phone_number
+            phone_number=phone_number,
+            bonus_product_name=bonus_product_name,  # Save bonus product name
+            location_name=location_name  # Save location name
         )
         session.add(new_excel_order)
         await session.commit()
-
 
 
 async def orm_get_all_excel_orders():
@@ -439,19 +447,22 @@ async def orm_get_all_excel_orders():
                     ExcelOrder.category_name_ru,
                     ExcelOrder.product_name_ru,
                     ExcelOrder.product_quantity,
-                    ExcelOrder.initial_cost,  # ✅ Added
-                    ExcelOrder.promo_code_name,  # ✅ Added
-                    ExcelOrder.promo_discount_percentage,  # ✅ Added
+                    ExcelOrder.initial_cost,
+                    ExcelOrder.promo_code_name,
+                    ExcelOrder.promo_discount_percentage,
                     ExcelOrder.total_cost,
                     ExcelOrder.customer_name,
                     ExcelOrder.username,
                     ExcelOrder.phone_number,
                     ExcelOrder.status,
                     ExcelOrder.created_at,
+                    ExcelOrder.location_name,  # ✅ Added location name
+                    ExcelOrder.bonus_product_name,  # ✅ Added bonus product name
                     User.latitude,
                     User.longitude
-                ).join(User, ExcelOrder.phone_number == User.phone_number)
+                ).outerjoin(User, ExcelOrder.phone_number == User.phone_number)  # ✅ Changed to outer join
             )
+
             orders = result.fetchall()
 
             orders_list = [
@@ -460,17 +471,19 @@ async def orm_get_all_excel_orders():
                     "category_name_ru": order.category_name_ru,
                     "product_name_ru": order.product_name_ru,
                     "product_quantity": order.product_quantity,
-                    "initial_cost": order.initial_cost if order.initial_cost else 0.0,  # ✅ Handle None
-                    "promo_code_name": order.promo_code_name if order.promo_code_name else "N/A",  # ✅ Handle None
-                    "promo_discount_percentage": order.promo_discount_percentage if order.promo_discount_percentage else 0.0,  # ✅ Handle None
+                    "initial_cost": order.initial_cost or 0.0,  # ✅ Handles None
+                    "promo_code_name": order.promo_code_name or "N/A",  # ✅ Handles None
+                    "promo_discount_percentage": order.promo_discount_percentage or 0.0,  # ✅ Handles None
                     "total_cost": order.total_cost,
                     "customer_name": order.customer_name,
-                    "username": order.username if order.username else "N/A",
+                    "username": order.username or "N/A",
                     "phone_number": order.phone_number,
-                    "status": order.status if order.status else "pending",
+                    "status": order.status or "pending",
                     "order_created_at": order.created_at,
-                    "latitude": order.latitude,
-                    "longitude": order.longitude
+                    "location_name": order.location_name or "N/A",  # ✅ Added location name
+                    "bonus_product_name": order.bonus_product_name or "N/A",  # ✅ Added bonus product name
+                    "latitude": order.latitude or "N/A",
+                    "longitude": order.longitude or "N/A",
                 }
                 for order in orders
             ]
@@ -554,15 +567,6 @@ async def orm_get_referred_users_count(user_id: int):
         referred_users_count = len(result.scalars().all())
 
     return referred_users_count
-
-
-
-
-
-
-
-
-
 
 
 async def orm_delete_order_by_id(order_id: int):
@@ -689,7 +693,6 @@ async def orm_delete_promocode(promo_code_id: int):
             return False
 
 
-
 async def orm_get_promo_code_by_text(promo_code: str):
     async with SessionMaker() as session:
         result = await session.execute(
@@ -711,6 +714,7 @@ async def orm_activate_promo_code_for_user(user_id: int, promo_code_id: int):
             await session.commit()
             return True
         return False
+
 
 async def orm_get_promo_code_by_id(promo_code_id: int):
     async with SessionMaker() as session:
@@ -741,7 +745,6 @@ async def orm_get_promo_discount(promo_code: str) -> Decimal:
         return Decimal(discount) if discount else Decimal(0)
 
 
-
 async def orm_get_excel_orders_by_user_phone(phone_number: str):
     async with SessionMaker() as session:
         result = await session.execute(
@@ -749,9 +752,6 @@ async def orm_get_excel_orders_by_user_phone(phone_number: str):
             .where(ExcelOrder.phone_number == phone_number, ExcelOrder.status == "pending")
         )
         return result.scalars().all()
-
-
-
 
 
 async def orm_get_referred_users_with_orders_count(user_id: int):
@@ -765,27 +765,6 @@ async def orm_get_referred_users_with_orders_count(user_id: int):
         referred_users_with_orders_count = len(
             result.scalars().all())  # Count the number of referred users who have orders
     return referred_users_with_orders_count
-
-
-async def orm_get_bonus_products_by_referral_count(referral_count: int):
-    """
-    Получает список бонусных товаров, доступных пользователю с заданным количеством рефералов.
-    """
-    async with SessionMaker() as session:
-        result = await session.execute(
-            select(BonusProduct).where(BonusProduct.required_referrals <= referral_count, BonusProduct.active == True)
-        )
-        return result.scalars().all()
-
-
-async def orm_add_bonus_to_user(user_id: int, bonus_product_id: int):
-    """
-    Добавляет пользователю бонусный продукт.
-    """
-    async with SessionMaker() as session:
-        new_bonus = UserBonus(user_id=user_id, bonus_product_id=bonus_product_id)
-        session.add(new_bonus)
-        await session.commit()
 
 
 async def orm_check_user_bonus(user_id: int, bonus_product_id: int):
@@ -816,7 +795,8 @@ async def orm_add_bonus_to_order(order_id: int, bonus_products: list):
         await session.commit()
 
 
-async def orm_add_bonus_product(name_ru: str, name_uz: str, description_ru: str, description_uz: str, image_url: str, required_referrals: int):
+async def orm_add_bonus_product(name_ru: str, name_uz: str, description_ru: str, description_uz: str, image_url: str,
+                                required_referrals: int):
     async with SessionMaker() as session:
         new_bonus_product = BonusProduct(
             name_ru=name_ru,
@@ -846,8 +826,7 @@ async def orm_delete_bonus_product(bonus_id: int) -> bool:
         return result.rowcount > 0  # Returns True if a row was deleted
 
 
-
-async def orm_get_referred_users_with_orders_count(user_id: int):
+async def orm_get_referred_users_with_orders(user_id: int):
     async with SessionMaker() as session:
         result = await session.execute(
             select(User.id)
@@ -857,6 +836,7 @@ async def orm_get_referred_users_with_orders_count(user_id: int):
         )
         return len(result.scalars().all())
 
+
 async def orm_get_bonus_products_by_referral_count(referral_count: int):
     async with SessionMaker() as session:
         result = await session.execute(
@@ -865,6 +845,7 @@ async def orm_get_bonus_products_by_referral_count(referral_count: int):
             .order_by(BonusProduct.required_referrals.desc())
         )
         return result.scalars().first()
+
 
 async def orm_add_bonus_to_user(user_id: int, bonus_product_id: int):
     async with SessionMaker() as session:
@@ -883,3 +864,43 @@ async def orm_add_bonus_to_user(user_id: int, bonus_product_id: int):
                 }
             }
     return {"success": False, "message": {"ru": "Бонус не найден", "uz": "Bonus topilmadi"}}
+
+
+async def orm_get_user_bonus_count(user_id: int):
+    """Получить количество бонусов, выданных пользователю."""
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(func.count(UserBonus.id)).where(
+                UserBonus.user_id == user_id
+            )
+        )
+        return result.scalar()  # Количество выданных бонусов
+
+
+async def orm_update_product_video(product_id: int, new_video: str):
+    async with SessionMaker() as session:
+        result = await session.execute(
+            select(Product).filter(Product.id == product_id)
+        )
+        product = result.scalars().first()
+        if product:
+            product.video_id = new_video
+            await session.commit()
+            return True
+    return False
+
+
+async def orm_update_order_comment(order_id: int, comment: str):
+    async with SessionMaker() as session:
+        # Находим все элементы заказа, так как комментарий общий
+        await session.execute(
+            update(OrderItem)
+            .where(OrderItem.order_id == order_id)
+            .values(order_comment=comment)
+        )
+        await session.commit()
+
+
+
+
+
